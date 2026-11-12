@@ -148,7 +148,7 @@ function detailView(id) {
     <section class="panel"><h2>주변 시세 · 안전마진</h2>
       ${marketRows ? `<div class="tbl"><table><thead><tr><th>평형</th><th>분양가</th><th>주변 시세</th><th>마진(취득세 차감)</th></tr></thead><tbody>${marketRows}</tbody></table></div>` : '<p class="sub">비교할 주택형 정보가 없어요. 공고문에서 확인해 주세요.</p>'}
       ${comps.length ? `<h2 style="margin-top:12px">비교 단지</h2><div class="tbl"><table><thead><tr><th>단지</th><th>거리</th><th>준공</th><th>거래</th><th>중위가</th></tr></thead><tbody>${comps.map(c => `<tr><td>${esc(c.name)}${c.kind === '분양권' ? ' <span class="tag">분양권</span>' : ''}</td><td class="mono">${(c.m / 1000).toFixed(1)}km</td><td class="mono">${c.built ?? '-'}</td><td class="mono">${c.n}건</td><td class="mono">${won(c.median)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-      <p class="sub" style="margin-top:6px">국토부 실거래가 기준: 반경 1km(부족하면 2·3km), 준공 10년 이내, 전용 ±10㎡, 최근 6개월 ㎡당 중위가.</p>
+      <p class="sub" style="margin-top:6px">국토부 실거래가·분양권 기준: 반경 1km(부족하면 2·3km), 준공 10년 이내(신도시 블록은 5년 이내·분양권), 전용 ±10㎡, 최근 6개월. 단지별 ㎡당 중위가의 중위값.</p>
     </section>
 
     <section class="panel"><h2>투자 판정 근거</h2><div class="reasons">${reasonRows(inv.notes)}</div></section>

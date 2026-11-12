@@ -51,13 +51,15 @@ const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) =
  * 반경 1km(부족하면 2km), 준공 10년 이내(분양권은 전부 신축), 면적 ±10㎡, 최근 6개월.
  * 결과는 ㎡당 중위가 × 대상 면적.
  */
-export async function comparables({ key, kakao, point, lawd, area, months = 6, log = () => {} }) {
+export async function comparables({ key, kakao, point, lawd, area, months = 6, newTown = false }) {
   if (!lawd || !area) return { status: '불확실', reason: '위치 또는 면적 정보 없음' };
   const yms = recentMonths(months);
   const nowYear = new Date().getFullYear();
+  // 신도시·택지지구 블록은 주변 구도심과 급지가 달라서 준공 5년 이내 + 분양권만 비교한다
+  const maxAge = newTown ? 5 : 10;
   const pool = [];
   for (const ym of yms) {
-    for (const t of await month(TRADE, key, lawd, ym)) if (t.built && t.built >= nowYear - 10) pool.push({ ...t, kind: '매매' });
+    for (const t of await month(TRADE, key, lawd, ym)) if (t.built && t.built >= nowYear - maxAge) pool.push({ ...t, kind: '매매' });
     for (const t of await month(SILV, key, lawd, ym)) pool.push({ ...t, kind: '분양권' });
   }
   const sized = pool.filter(t => Math.abs(t.area - area) <= 10);
@@ -79,19 +81,20 @@ export async function comparables({ key, kakao, point, lawd, area, months = 6, l
     const near = ranked.filter(g => g.m != null && g.m <= radius);
     const trades = near.flatMap(g => g.trades);
     if (trades.length >= 3) {
-      const ppm = median(trades.map(t => t.price / t.area));
+      // 거래 많은 한 단지가 시세를 끌고 가지 않게, 단지별 ㎡당 중위가를 구한 뒤 그 중위값을 쓴다
+      const ppm = median(near.map(g => median(g.trades.map(t => t.price / t.area))));
       const complexes = near
         .map(g => ({ name: g.apt, m: g.m, n: g.trades.length, built: g.trades[0].built, kind: g.trades[0].kind,
                      median: median(g.trades.map(t => t.price)), latest: g.trades.sort((a, b) => b.date.localeCompare(a.date))[0] }))
         .sort((a, b) => a.m - b.m).slice(0, 5);
       return {
-        status: trades.length >= 5 ? '확인' : '표본 적음',
-        radius, sample: trades.length, months,
+        status: trades.length >= 5 && near.length >= 2 ? '확인' : '표본 적음',
+        radius, sample: trades.length, months, newTown, maxAge,
         estimate: Math.round((ppm * area) / 1e6) * 1e6,
         perPyeong: Math.round(ppm * 3.3058),
         complexes,
       };
     }
   }
-  return { status: '불확실', reason: `반경 3km 안 준공 10년 이내 비슷한 면적 거래 3건 미만 (표본 ${sized.length})` };
+  return { status: '불확실', reason: `반경 3km 안 준공 ${maxAge}년 이내${newTown ? '·분양권' : ''} 비슷한 면적 거래 3건 미만 (표본 ${sized.length})` };
 }

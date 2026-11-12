@@ -61,7 +61,8 @@ for (const it of items) {
         .sort((a, b) => Math.abs(a.exclusiveArea - 84) - Math.abs(b.exclusiveArea - 84)).slice(0, 3);
       out.market = [];
       for (const m of sizes) {
-        const comp = await comparables({ key: KEY, kakao, point: geo, lawd: geo.lawd, area: m.exclusiveArea });
+        const newTown = !geo.precise || /지구|블[록럭]|BL|택지|신도시/.test(`${it.address || ''} ${it.name}`);
+        const comp = await comparables({ key: KEY, kakao, point: geo, lawd: geo.lawd, area: m.exclusiveArea, newTown });
         const tax = Math.round(acquisitionTax(m.topPrice));
         out.market.push({ type: m.type, area: Math.round(m.exclusiveArea * 10) / 10, pyeong: m.pyeong, price: m.topPrice, tax, comp,
           margin: comp.estimate ? comp.estimate - m.topPrice - tax : null });
