@@ -1,6 +1,10 @@
-// 매일 실행 진입점: 수집 → (분석) → web/data/latest.json
+// 매일 실행: 수집 → 분석 → dist/report.json (암호화 전 평문, dist는 커밋 안 함)
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { collectApplyhome } from './collect/applyhome.mjs';
+import { collectLH, crossCheck } from './collect/lh.mjs';
+import { makeKakao } from './collect/kakao.mjs';
+import { comparables } from './collect/molit.mjs';
+import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL } from './analyze/judge.mjs';
 
 function loadEnv() {
   if (!existsSync('.env')) return;
@@ -9,31 +13,86 @@ function loadEnv() {
     if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
   }
 }
-
-function kstToday() {
-  return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-}
-
 loadEnv();
-const key = process.env.DATA_GO_KR_KEY;
-if (!key) { console.error('DATA_GO_KR_KEY가 없습니다 (.env 확인)'); process.exit(1); }
 
+const KEY = process.env.DATA_GO_KR_KEY, KAKAO = process.env.KAKAO_REST_KEY;
+if (!KEY || !KAKAO) { console.error('DATA_GO_KR_KEY / KAKAO_REST_KEY 필요'); process.exit(1); }
+const household = existsSync('config/household.json') ? JSON.parse(readFileSync('config/household.json', 'utf8')) : null;
+
+const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const from = kstToday();
-const to = new Date(Date.parse(from) + 9 * 864e5).toISOString().slice(0, 10); // 오늘~9일 뒤
-const report = { generatedAt: new Date().toISOString(), range: { from, to }, sources: {}, items: [] };
+const to = new Date(Date.parse(from) + 9 * 864e5).toISOString().slice(0, 10);
+const kakao = makeKakao(KAKAO);
+const report = { generatedAt: new Date().toISOString(), range: { from, to }, hasHousehold: !!household, sources: {}, warnings: [], items: [] };
 
-try {
-  const { items, stats } = await collectApplyhome({ key, from, to });
-  report.items.push(...items);
-  report.sources.applyhome = { ok: true, ...stats };
-} catch (e) {
-  report.sources.applyhome = { ok: false, error: String(e) };
-  console.error('[applyhome] 실패', e);
+// ── 수집 ──
+let ah = [], lh = [];
+try { const r = await collectApplyhome({ key: KEY, from, to }); ah = r.items; report.sources.applyhome = { ok: true, ...r.stats }; }
+catch (e) { report.sources.applyhome = { ok: false, error: String(e) }; report.warnings.push(`청약홈 수집 실패: ${e.message}`); }
+try { const r = await collectLH({ key: KEY, from }); lh = r.items; report.sources.lh = { ok: true, ...r.stats }; }
+catch (e) { report.sources.lh = { ok: false, error: String(e) }; report.warnings.push(`LH 수집 실패: ${e.message}`); }
+
+const { onlyLH, matched } = crossCheck(ah, lh);
+report.crossCheck = { lhTotal: lh.length, matched: matched.length, onlyLH: onlyLH.map(i => i.name) };
+// LH 링크를 청약홈 항목에도 붙여 준다
+for (const m of matched) {
+  const hit = ah.find(a => a.name && m.name && (a.name.includes(m.name.slice(0, 6)) || m.name.includes(a.name.slice(0, 6))));
+  if (hit) hit.lhUrl = m.noticeUrl;
+}
+const items = [...ah, ...onlyLH.map(i => ({ ...i, onlyLH: true }))];
+
+// ── 분석 ──
+for (const it of items) {
+  const out = { ...it, category: category(it), categoryLabel: CATEGORY_LABEL[category(it)] };
+  try {
+    const geo = it.address ? await kakao.geocode(it.address) : await kakao.geocode(it.name.replace(/\(.*?\)|\[.*?\]|입주자.*$|잔여.*$|공공분양.*$|신혼희망.*$/g, ' ').trim());
+    out.geo = geo;
+    if (geo) {
+      out.location = await kakao.nearby(geo);
+      out.commute = await kakao.commute(geo);
+      // 평형별 시세 (서로 다른 전용면적 최대 3개)
+      const sizes = [...new Map((it.models || []).filter(m => m.exclusiveArea && m.topPrice)
+        .map(m => [Math.round(m.exclusiveArea), m])).values()]
+        .sort((a, b) => Math.abs(a.exclusiveArea - 84) - Math.abs(b.exclusiveArea - 84)).slice(0, 3);
+      out.market = [];
+      for (const m of sizes) {
+        const comp = await comparables({ key: KEY, kakao, point: geo, lawd: geo.lawd, area: m.exclusiveArea });
+        const tax = Math.round(acquisitionTax(m.topPrice));
+        out.market.push({ type: m.type, area: Math.round(m.exclusiveArea * 10) / 10, pyeong: m.pyeong, price: m.topPrice, tax, comp,
+          margin: comp.estimate ? comp.estimate - m.topPrice - tax : null });
+      }
+    }
+  } catch (e) {
+    out.analysisError = String(e.message || e);
+  }
+  out.eligibility = eligibility(it, household);
+  out.invest = invest(it, { models: it.models, location: out.location, market: out.market });
+  out.commuteResult = commuteVerdict(out.commute);
+  out.overall = overall(out.eligibility, out.invest, out.commuteResult);
+  report.items.push(out);
 }
 
-// TODO 다음 단계: LH, 국토부 실거래가, 카카오(좌표·역·학교·출퇴근), 자격·투자 판정
+const rank = i => (i.overall.star ? 0 : i.eligibility.status === '불가' ? 3 : i.invest.verdict === '추천' ? 1 : i.invest.verdict === '조건부' ? 1.5 : 2);
+report.items.sort((a, b) => rank(a) - rank(b) || (a.window?.end || '').localeCompare(b.window?.end || ''));
 
-report.items.sort((a, b) => (a.window.end || '').localeCompare(b.window.end || ''));
-mkdirSync('web/data', { recursive: true });
-writeFileSync('web/data/latest.json', JSON.stringify(report, null, 2));
-console.log(`완료: ${report.items.length}건 → web/data/latest.json`);
+const count = f => report.items.filter(f).length;
+report.summary = {
+  total: report.items.length,
+  star: count(i => i.overall.star),
+  recommend: count(i => i.invest.verdict === '추천'),
+  conditional: count(i => i.invest.verdict === '조건부'),
+  notRecommend: count(i => i.invest.verdict === '비추천'),
+  closingToday: count(i => i.window?.end === from),
+  starNames: report.items.filter(i => i.overall.star).map(i => i.name),
+  recommendNames: report.items.filter(i => i.invest.verdict === '추천').map(i => i.name),
+};
+
+mkdirSync('dist', { recursive: true });
+writeFileSync('dist/report.json', JSON.stringify(report));
+// 세대 정보가 없을 때만 단지별 판정을 로그로 남긴다 (공개 로그에 세대 정보가 섞이지 않게)
+if (!household) for (const i of report.items) {
+  const m = i.market?.find(x => x.margin != null);
+  console.log(`- [${i.invest.verdict}/${i.commuteResult.verdict}] ${i.name} | ${i.categoryLabel} | ${m ? `전용${m.area} 분양${(m.price / 1e8).toFixed(2)}억 시세${(m.comp.estimate / 1e8).toFixed(2)}억(${m.comp.radius}m,${m.comp.sample}건)` : (i.market?.[0]?.comp?.reason || '시세없음')} | 역 ${i.location?.subway?.[0] ? i.location.subway[0].name + ' ' + i.location.subway[0].m + 'm' : '-'} | 출퇴근 ${i.commute?.avg ?? '-'}분${i.analysisError ? ' | ERR ' + i.analysisError : ''}${i.geo ? '' : ' | 좌표없음'}`);
+}
+// 공개 로그에는 세대 정보가 들어가지 않게 개수만 출력
+console.log(`완료: ${report.items.length}건 (청약홈 ${ah.length}, LH 단독 ${onlyLH.length}) / 추천 ${report.summary.recommend} · 조건부 ${report.summary.conditional} · 비추천 ${report.summary.notRecommend} / 경고 ${report.warnings.length}`);

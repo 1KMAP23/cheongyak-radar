@@ -4,6 +4,10 @@
   "type": "module",
   "engines": { "node": ">=20" },
   "scripts": {
-    "run": "node src/run.mjs"
+    "collect": "node src/run.mjs",
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "web-push": "3.6.7"
   }
 }

@@ -1,0 +1,62 @@
+name: daily
+on:
+  schedule:
+    - cron: '17 21 * * *'   # 매일 06:17 (한국시간)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['src/**', 'web/**', 'scripts/**', 'config/**', '.github/workflows/daily.yml']
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency: { group: daily, cancel-in-progress: false }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+      KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+      APP_PASSPHRASE: ${{ secrets.APP_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - name: 세대 정보 (비밀값 → 파일, 로그에 안 나옴)
+        env: { HOUSEHOLD_JSON: '${{ secrets.HOUSEHOLD_JSON }}' }
+        run: if [ -n "$HOUSEHOLD_JSON" ]; then printf '%s' "$HOUSEHOLD_JSON" > config/household.json; fi
+      - name: 수집·분석
+        run: node src/run.mjs
+      - name: 웹앱 빌드·암호화
+        run: node scripts/build.mjs && node scripts/encrypt.mjs
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: dist/site }
+      - name: 푸시용 요약 보관
+        uses: actions/upload-artifact@v4
+        with: { name: summary, path: dist/summary.json, retention-days: 1 }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: '${{ steps.d.outputs.page_url }}' }
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4
+  push:
+    needs: deploy
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with: { name: summary, path: dist }
+      - name: 아이폰 푸시
+        env:
+          PUSH_SUBSCRIPTIONS: ${{ secrets.PUSH_SUBSCRIPTIONS }}
+          VAPID_PUBLIC_KEY: BDGbFHT5-WKQMTzp1Y_tj_5ByKKSqmjqoVrW-P67Yf2_EUMiaAS6Xabst53usz-kz1tCr6UA8OA_vk-gl47xPCA
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: node scripts/push.mjs
