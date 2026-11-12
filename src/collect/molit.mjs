@@ -101,7 +101,7 @@ export async function comparables({ key, kakao, point, lawd, area, months = 6, n
   // 같은 공고의 다른 평형과 비교 단지를 맞춘다 (평형마다 이웃이 달라지면 ㎡당 가격이 들쭉날쭉해진다)
   const pinned = prefer ? geoed.filter(g => prefer.includes(keyOf(g))) : [];
   if (self.reduce((s, g) => s + g.trades.length, 0) >= 3) { use = self; method = '같은 단지 실거래'; }
-  else if (pinned.length >= Math.min(3, prefer.length) && pinned.length >= 2 && pinned.reduce((s, g) => s + g.trades.length, 0) >= 3) { use = pinned; method = '다른 평형과 같은 비교 단지'; }
+  else if (prefer && pinned.length >= Math.min(3, prefer.length) && pinned.length >= 2 && pinned.reduce((s, g) => s + g.trades.length, 0) >= 3) { use = pinned; method = '다른 평형과 같은 비교 단지'; }
   else {
     const others = geoed.filter(g => !isSelf(g));
     const solid = others.filter(g => g.trades.length >= 2);

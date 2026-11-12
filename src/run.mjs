@@ -106,6 +106,10 @@ for (const it of items) {
 }
 
 if (competitionStatus()) report.notices = [competitionStatus()];
+// 분석 실패 감시: 위치를 찾은 공고 중 시세 분석이 깨진 게 많으면 앱 상단에 경고
+const failed = report.items.filter(i => i.analysisError);
+if (failed.length >= 3) report.warnings.push(`분석 오류 ${failed.length}건: ${failed[0].analysisError}`);
+console.log(`분석 오류: ${failed.length}건${failed.length ? ` (${failed[0].analysisError})` : ''}`);
 
 // 아침 푸시 문구는 저장소 주인 세대(HOUSEHOLD_JSON) 기준. 이 판정 결과는 보고서에 넣지 않는다
 // (비밀번호를 다른 사람과 공유하면 보고서를 열 수 있으므로, 세대 정보로 만든 내용은 각 기기에서 계산한다)
