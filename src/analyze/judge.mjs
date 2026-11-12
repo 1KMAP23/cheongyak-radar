@@ -122,6 +122,7 @@ export function invest(it, { models, location, market }) {
       add('시세 이상치', `주변 시세가 분양가의 ${ratio.toFixed(1)}배 → 비교 단지가 다른 급지일 수 있음. 비교 단지 목록 확인 필요`, 'bad');
       if (verdict === '추천') verdict = '조건부';
     }
+    if (best.comp.newTown) add('신도시 보정', '신도시·택지지구는 준공 5년 이내·분양권만 비교했어요. 아직 입주 전인 신도시의 미래 가치(교통·상권 완성)는 시세에 반영되지 않아 마진이 낮게 나올 수 있어요', 'mid');
     if (best.comp.complexes?.length === 1) add('시세 신뢰도', `비교 단지가 ${best.comp.complexes[0].name} 한 곳뿐`, 'mid');
   }
 
