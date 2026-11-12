@@ -66,11 +66,11 @@ for (const it of items) {
       const near = t => uniq.slice().sort((a, b) => Math.abs(a.exclusiveArea - t) - Math.abs(b.exclusiveArea - t))[0];
       const sizes = [...new Set([near(84), near(59), ...uniq.sort((a, b) => Math.abs(a.exclusiveArea - 84) - Math.abs(b.exclusiveArea - 84))].filter(Boolean))].slice(0, 3);
       out.market = [];
-      let pinnedKeys = null;
+      let pinnedKeys = null, pinnedOk = true;
       for (const m of sizes) {
         const newTown = !geo.precise || /지구|블[록럭]|BL|택지|신도시/.test(`${it.address || ''} ${it.name}`);
-        const comp = await comparables({ key: KEY, kakao, point: geo, lawd: geo.lawd, area: m.exclusiveArea, newTown, name: shortName(it.name).replace(/ 잔여$/, ''), prefer: pinnedKeys });
-        if (!pinnedKeys && comp.keys && comp.method !== '같은 단지 실거래') pinnedKeys = comp.keys;
+        const comp = await comparables({ key: KEY, kakao, point: geo, lawd: geo.lawd, area: m.exclusiveArea, newTown, name: shortName(it.name).replace(/ 잔여$/, ''), prefer: pinnedKeys, preferReliable: pinnedOk });
+        if (!pinnedKeys && comp.keys && comp.method !== '같은 단지 실거래') { pinnedKeys = comp.keys; pinnedOk = comp.reliable !== false; }
         const tax = Math.round(acquisitionTax(m.topPrice));
         // 분양가에 빠져 있는 발코니 확장비 추정 (전용 ㎡당 20만원, 84㎡ 약 1,700만). 정확한 금액은 공고문 옵션표
         const balcony = Math.round(m.exclusiveArea * 2e5 / 1e5) * 1e5;

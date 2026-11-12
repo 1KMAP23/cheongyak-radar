@@ -356,9 +356,9 @@ export function affordable(h, TH) {
     limitedByContract: (+a.financial || 0) - (+a.debt || 0) < calc('private', `${y + 3}01`, false) * 0.1 + 1e6 };
 }
 
-/** 🔥 핫 판정: 안전마진 기준. 믿을 수 있는 평형 중 가장 큰 마진. 2억 이상 🔥, 3억 이상 🔥🔥 */
+/** 🔥 핫 판정: 안전마진 기준. 믿을 수 있고(편차·이상치·경쟁률 검산 통과) 거래 5건 이상인 평형 중 가장 큰 마진. 2억 이상 🔥, 3억 이상 🔥🔥 */
 export function marginHot(market) {
-  const ok = (market || []).filter(r => r.margin != null && r.reliable);
+  const ok = (market || []).filter(r => r.margin != null && r.reliable && (r.comp?.sample || 0) >= 5);
   if (!ok.length) return { level: 0, why: '' };
   const best = ok.sort((a, b) => b.margin - a.margin)[0];
   const m = best.margin, level = m >= 3e8 ? 2 : m >= 2e8 ? 1 : 0;

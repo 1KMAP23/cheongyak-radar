@@ -69,7 +69,7 @@ async function nearbyLawds(kakao, point, lawd) {
  * 단지별 ㎡당 중위가의 중위값 × 대상 면적. 단지 간 ㎡당 가격 차이가 1.7배를 넘으면 '편차 큼'으로 신뢰도 낮음.
  * 매매는 준공 10년 이내(신도시 5년), 직거래·해제·입주권 제외, 최근 6개월, 면적 ±8㎡.
  */
-export async function comparables({ key, kakao, point, lawd, area, months = 6, newTown = false, name = '', prefer = null }) {
+export async function comparables({ key, kakao, point, lawd, area, months = 6, newTown = false, name = '', prefer = null, preferReliable = true }) {
   if (!lawd || !area) return { status: '불확실', reason: '위치 또는 면적 정보 없음' };
   const yms = recentMonths(months);
   const nowYear = new Date().getFullYear();
@@ -101,7 +101,7 @@ export async function comparables({ key, kakao, point, lawd, area, months = 6, n
   // 같은 공고의 다른 평형과 비교 단지를 맞춘다 (평형마다 이웃이 달라지면 ㎡당 가격이 들쭉날쭉해진다)
   const pinned = prefer ? geoed.filter(g => prefer.includes(keyOf(g))) : [];
   if (self.reduce((s, g) => s + g.trades.length, 0) >= 3) { use = self; method = '같은 단지 실거래'; }
-  else if (pinned.length >= 2 && pinned.reduce((s, g) => s + g.trades.length, 0) >= 3) { use = pinned; method = '다른 평형과 같은 비교 단지'; }
+  else if (pinned.length >= Math.min(3, prefer.length) && pinned.length >= 2 && pinned.reduce((s, g) => s + g.trades.length, 0) >= 3) { use = pinned; method = '다른 평형과 같은 비교 단지'; }
   else {
     const others = geoed.filter(g => !isSelf(g));
     const solid = others.filter(g => g.trades.length >= 2);
@@ -116,7 +116,7 @@ export async function comparables({ key, kakao, point, lawd, area, months = 6, n
   const ppm = median(ppms);
   const spread = ppms.length > 1 ? Math.max(...ppms) / Math.min(...ppms) : 1;
   const radius = Math.max(...use.map(g => g.m));
-  const reliable = spread <= 1.7 && (use.length >= 2 || method === '같은 단지 실거래') && trades.length >= 3;
+  const reliable = spread <= 1.7 && (use.length >= 2 || method === '같은 단지 실거래') && trades.length >= 3 && (method !== '다른 평형과 같은 비교 단지' || preferReliable);
   return {
     status: !reliable ? '편차 큼' : trades.length >= 5 ? '확인' : '표본 적음',
     reliable, method, spread: +spread.toFixed(2),
