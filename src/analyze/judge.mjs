@@ -9,6 +9,8 @@ export function category(it) {
   const n = it.name || '';
   if (/지분적립/.test(n)) return 'equityShare';
   if (it.typeName === '신혼희망타운' || it.kind === 'lh-newlywed' || /신혼희망/.test(n)) return 'newlywedHopeTown';
+  // LH 공가세대 매각: 청약통장 없이 추첨. 무주택 조건이면 무순위, 유주택도 되면 임의공급과 같게 본다
+  if (/공가세대.*매각/.test(n)) return /유주택자?\s*가능/.test(n) ? 'arbitrary' : 'noRank';
   if (it.typeName === '무순위') return 'noRank';
   if (it.typeName === '임의공급') return 'arbitrary';
   if (it.detailType === '국민' || it.source === 'lh') return 'publicSale';
@@ -103,6 +105,7 @@ export function placeLabel(it) {
 
 /** 목록용 짧은 이름: 공고 문구를 걷어낸다 (상세 화면은 원래 이름) */
 export function shortName(name) {
+  if (/공가세대.*매각/.test(name)) return `LH 공가세대 매각${/다세대/.test(name) ? '(다세대)' : ''}${/유주택자?\s*가능/.test(name) ? ' · 유주택 가능' : ''}`;
   return name
     .replace(/\[정정공고\]/g, '')
     .replace(/\((공공분양|본청약|공공분양주택)\)/g, '')
