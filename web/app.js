@@ -142,7 +142,7 @@ const mtone = m => (m == null ? 'plain' : m >= 2e8 ? 'good' : m >= 1e8 ? 'mid' :
 function sizeBox(it, t) {
   const z = sizeInfo(it, t);
   if (!z) return `<span class="st plain none"><small>${t}㎡</small><b class="mono">없음</b></span>`;
-  const unsure = it.invest.marginReliable === false && z.margin != null;
+  const unsure = z.reliable === false && z.margin != null;
   const price = z.lo === z.hi ? won(z.hi) : `${won(z.lo)}~${won(z.hi).replace('억', '')}억`;
   return `<span class="st ${unsure ? 'mid' : mtone(z.margin)}"><small>${t}㎡ <span class="mono">${price.replace('~', '~')}</span></small><b class="mono">${z.margin != null ? sgn(z.margin) + (unsure ? '?' : '') : '시세 ?'}</b></span>`;
 }
@@ -192,7 +192,7 @@ function detailView(id) {
   const nav = it.geo ? `https://map.kakao.com/link/to/${encodeURIComponent(it.name)},${it.geo.y},${it.geo.x}` : null;
   const models = (it.models || []).filter(m => m.topPrice);
   const reasonRows = arr => (arr || []).map(n => `<div class="${esc(n.s)}"><b>${esc(n.k)}</b><span>${esc(n.v)}</span></div>`).join('');
-  const marketRows = (it.market || []).map(m => `<tr><td>전용 ${m.area}㎡ (${m.pyeong ?? '-'}평)</td><td class="mono">${won(m.price)}</td><td class="mono">${m.comp.estimate ? won(m.comp.estimate) : '-'}</td><td class="mono">${m.margin != null ? sgn(m.margin) : esc(m.comp.reason || m.comp.status)}</td></tr>`).join('');
+  const marketRows = (it.market || []).map(m => `<tr><td>전용 ${m.area}㎡ (${m.pyeong ?? '-'}평)</td><td class="mono">${won(m.price)}</td><td class="mono">${m.comp.estimate ? won(m.comp.estimate) : '-'}</td><td class="mono">${m.margin != null ? sgn(m.margin) + (m.reliable === false ? '?' : '') : esc(m.comp.reason || m.comp.status)}</td></tr>`).join('');
   const comps = (it.market || []).find(m => m.comp.complexes)?.comp.complexes || [];
   const best = (it.market || []).filter(r => r.margin != null).sort((a, b) => Math.abs(a.area - 84) - Math.abs(b.area - 84))[0];
   const pc = prosCons(it);
@@ -202,9 +202,9 @@ function detailView(id) {
     <div><h1>${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</h1><p class="sub">${esc(it.categoryLabel)} · ${esc(it.address || it.region)}</p></div>
     <div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${it.hot ? `<span class="pill v-star">${'🔥'.repeat(it.hot)} 핫</span>` : ''}${dueTag(it)}${etag(it)}<span class="tag">${esc(nextStep(it))}</span></div>
     <div class="sizes">${[59, 84].map(t => { const z = sizeInfo(it, t); if (!z) return `<div class="size none"><b>${t}㎡</b><span class="sub">이 공고엔 없어요</span></div>`;
-      const unsure = inv.marginReliable === false && z.margin != null;
+      const unsure = z.reliable === false && z.margin != null;
       return `<div class="size ${unsure ? 'mid' : mtone(z.margin)}"><div class="h"><b>${t}㎡</b><small>전용 ${z.area}㎡</small></div>
-        <dl><div><dt>분양가</dt><dd class="mono">${z.lo === z.hi ? won(z.hi) : `${won(z.lo)}~${won(z.hi)}`}</dd></div><div><dt>주변 시세</dt><dd class="mono">${z.estimate ? won(z.estimate) : '-'}</dd></div><div class="m"><dt>안전마진</dt><dd class="mono">${z.margin != null ? sgn(z.margin) + (unsure ? '?' : '') : '시세 부족'}</dd></div></dl></div>`; }).join('')}</div>
+        <dl><div><dt>분양가</dt><dd class="mono">${z.lo === z.hi ? won(z.hi) : `${won(z.lo)}~${won(z.hi)}`}</dd></div><div><dt>주변 시세</dt><dd class="mono">${z.estimate ? won(z.estimate) : '-'}</dd></div><div class="m"><dt>안전마진</dt><dd class="mono">${z.margin != null ? sgn(z.margin) + (unsure ? '?' : '') : '시세 부족'}</dd></div></dl>${z.method ? `<small class="sub">${esc(z.method)}${unsure ? ' · 편차 커서 참고만' : ''}</small>` : ''}</div>`; }).join('')}</div>
     ${it.hotWhy ? `<div class="hotwhy">🔥 ${esc(it.hotWhy)}</div>` : ''}
     <div class="kpis two">
       ${kpi('출퇴근', it.commute?.avg ? `${it.commute.avg}분` : '-', tone(com.verdict), R.wp ? esc(R.wp.name) : '직장 미설정')}
@@ -226,9 +226,9 @@ function detailView(id) {
     ${it.fit ? `<section class="panel"><h2>나에게 맞는 정도 <span class="mono">${it.fit.total}점</span> <span class="sub">/ 100</span></h2><div class="bars">${it.fit.parts.map(p => `<div><b>${esc(p.k)}</b><span class="bar"><i style="width:${Math.round(p.v / p.max * 100)}%"></i></span><span class="mono">${p.v}/${p.max}</span><span class="sub">${esc(p.why)}</span></div>`).join('')}</div></section>` : ''}
 
     <section class="panel"><h2>주변 시세 · 안전마진</h2>
-      ${marketRows ? `<div class="tbl"><table><thead><tr><th>평형</th><th>분양가</th><th>주변 시세</th><th>마진(취득세 차감)</th></tr></thead><tbody>${marketRows}</tbody></table></div>` : '<p class="sub">비교할 주택형 정보가 없어요. 공고문에서 확인해 주세요.</p>'}
-      ${comps.length ? `<details><summary>비교 단지 ${comps.length}곳 보기</summary><div class="tbl"><table><thead><tr><th>단지</th><th>거리</th><th>준공</th><th>거래</th><th>중위가</th></tr></thead><tbody>${comps.map(c => `<tr><td>${esc(c.name)}${c.kind === '분양권' ? ' <span class="tag">분양권</span>' : ''}</td><td class="mono">${(c.m / 1000).toFixed(1)}km</td><td class="mono">${c.built ?? '-'}</td><td class="mono">${c.n}건</td><td class="mono">${won(c.median)}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
-      <p class="sub" style="margin-top:6px">국토부 실거래가·분양권: 반경 1km(부족하면 2·3km), 준공 10년 이내(신도시 블록은 5년 이내·분양권), 전용 ±10㎡, 최근 6개월, 단지별 ㎡당 중위가의 중위값. 새 아파트 프리미엄은 빠져 있어 마진이 보수적으로 나와요.</p>
+      ${marketRows ? `<div class="tbl"><table><thead><tr><th>평형</th><th>분양가</th><th>주변 시세</th><th>마진(취득세·확장비 차감)</th></tr></thead><tbody>${marketRows}</tbody></table></div>` : '<p class="sub">비교할 주택형 정보가 없어요. 공고문에서 확인해 주세요.</p>'}
+      ${comps.length ? `<details><summary>비교 단지 ${comps.length}곳 보기</summary><div class="tbl"><table><thead><tr><th>단지</th><th>거리</th><th>준공</th><th>거래</th><th>중위가</th></tr></thead><tbody>${comps.map(c => `<tr><td>${esc(c.name)}${c.self ? ' <span class="tag">같은 단지</span>' : ''}${c.kind === '분양권' ? ' <span class="tag">분양권</span>' : ''}</td><td class="mono">${(c.m / 1000).toFixed(1)}km</td><td class="mono">${c.built ?? '-'}</td><td class="mono">${c.n}건</td><td class="mono">${won(c.median)}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
+      <p class="sub" style="margin-top:6px">국토부 실거래가·분양권(직거래·해제·입주권 제외), 최근 6개월, 전용 ±8㎡. 같은 단지 거래가 3건 이상이면 그걸 쓰고, 없으면 3km 안 가까운 단지(1km 안 3곳 이상이면 최대 5곳, 아니면 가장 가까운 3곳)의 ㎡당 중위가 중위값. 매매는 준공 10년(신도시 5년) 이내만. 단지끼리 1.7배 넘게 차이 나면 '?'로 표시해요. 새 아파트 프리미엄은 빠져 있어 마진이 보수적으로 나와요.</p>
     </section>
 
     <section class="panel"><h2>투자 판정 근거</h2><div class="reasons">${reasonRows(inv.notes)}</div></section>

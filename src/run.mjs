@@ -68,10 +68,15 @@ for (const it of items) {
       out.market = [];
       for (const m of sizes) {
         const newTown = !geo.precise || /지구|블[록럭]|BL|택지|신도시/.test(`${it.address || ''} ${it.name}`);
-        const comp = await comparables({ key: KEY, kakao, point: geo, lawd: geo.lawd, area: m.exclusiveArea, newTown });
+        const comp = await comparables({ key: KEY, kakao, point: geo, lawd: geo.lawd, area: m.exclusiveArea, newTown, name: shortName(it.name).replace(/ 잔여$/, '') });
         const tax = Math.round(acquisitionTax(m.topPrice));
-        out.market.push({ type: m.type, area: Math.round(m.exclusiveArea * 10) / 10, pyeong: m.pyeong, price: m.topPrice, tax, comp,
-          margin: comp.estimate ? comp.estimate - m.topPrice - tax : null });
+        // 분양가에 빠져 있는 발코니 확장비 추정 (전용 ㎡당 20만원, 84㎡ 약 1,700만). 정확한 금액은 공고문 옵션표
+        const balcony = Math.round(m.exclusiveArea * 2e5 / 1e5) * 1e5;
+        const margin = comp.estimate ? comp.estimate - m.topPrice - tax - balcony : null;
+        const ratio = comp.estimate ? comp.estimate / m.topPrice : null;
+        // 이 평형 마진을 믿을 수 있나: 단지 간 편차, 시세/분양가 비율 0.6~1.6배
+        const reliable = margin != null && comp.reliable !== false && ratio >= 0.6 && ratio <= 1.6;
+        out.market.push({ type: m.type, area: Math.round(m.exclusiveArea * 10) / 10, pyeong: m.pyeong, price: m.topPrice, tax, balcony, comp, margin, reliable });
       }
     }
   } catch (e) {
@@ -81,7 +86,7 @@ for (const it of items) {
   try { out.buzz = await buzz(kakao, out); } catch (e) { out.buzz = null; }
   try { out.competition = await competition(KEY, it); } catch (e) { out.competition = null; }
   // 🔥 핫 = 주변 시세보다 얼마나 싼가(안전마진). SNS 언급은 참고용(buzzLevel)으로만 쓴다
-  const mh = marginHot(out.invest, out.market);
+  const mh = marginHot(out.market);
   out.hot = mh.level; out.hotWhy = mh.why;
   out.buzzLevel = hotLevel(out.buzz, out.competition);
   out.closingToday = it.window?.end === from;

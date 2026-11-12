@@ -356,14 +356,13 @@ export function affordable(h, TH) {
     limitedByContract: (+a.financial || 0) - (+a.debt || 0) < calc('private', `${y + 3}01`, false) * 0.1 + 1e6 };
 }
 
-/** 🔥 핫 판정: 안전마진 기준. 시세 이상치는 제외. 2억 이상 🔥, 3억 이상 🔥🔥 */
-export function marginHot(inv, market) {
-  if (!inv || inv.margin == null || inv.marginReliable === false) return { level: 0, why: '' };
-  const m = inv.margin;
-  const level = m >= 3e8 ? 2 : m >= 2e8 ? 1 : 0;
-  const best = (market || []).filter(r => r.margin === m)[0];
-  const why = level ? `${best ? `${Math.round(best.area)}㎡ ` : ''}시세보다 ${won(m)} 싸요${best?.comp?.estimate ? ` (분양가가 시세의 ${Math.round(best.price / best.comp.estimate * 100)}%)` : ''}` : '';
-  return { level, why };
+/** 🔥 핫 판정: 안전마진 기준. 믿을 수 있는 평형 중 가장 큰 마진. 2억 이상 🔥, 3억 이상 🔥🔥 */
+export function marginHot(market) {
+  const ok = (market || []).filter(r => r.margin != null && r.reliable);
+  if (!ok.length) return { level: 0, why: '' };
+  const best = ok.sort((a, b) => b.margin - a.margin)[0];
+  const m = best.margin, level = m >= 3e8 ? 2 : m >= 2e8 ? 1 : 0;
+  return { level, why: level ? `${Math.round(best.area)}㎡ 시세보다 ${won(m)} 싸요 (분양가가 시세의 ${Math.round(best.price / best.comp.estimate * 100)}%)` : '' };
 }
 
 /** 59㎡·84㎡ 기준 가격·마진 (±8㎡ 안에서 가장 가까운 주택형) */
@@ -374,5 +373,5 @@ export function sizeInfo(it, target) {
   const near = ms.length ? Math.min(...ms.map(m => Math.abs(m.exclusiveArea - target))) : null;
   const same = ms.filter(m => Math.abs(m.exclusiveArea - target) === near);
   const lo = same.length ? Math.min(...same.map(m => m.topPrice)) : row.price, hi = same.length ? Math.max(...same.map(m => m.topPrice)) : row.price;
-  return { area: row?.area ?? Math.round(same[0].exclusiveArea * 10) / 10, lo, hi, margin: row?.margin ?? null, estimate: row?.comp?.estimate ?? null };
+  return { area: row?.area ?? Math.round(same[0].exclusiveArea * 10) / 10, lo, hi, margin: row?.margin ?? null, estimate: row?.comp?.estimate ?? null, reliable: row ? row.reliable !== false : true, method: row?.comp?.method };
 }

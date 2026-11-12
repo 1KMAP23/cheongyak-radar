@@ -89,7 +89,7 @@ export function makeKakao(restKey) {
     return { date: mon.toISOString().slice(0, 10), go, back, avg };
   }
 
-  return { geocode, nearby, commute, get };
+  return { geocode, nearby, commute, get, region };
 }
 
 export function haversine(a, b) {
