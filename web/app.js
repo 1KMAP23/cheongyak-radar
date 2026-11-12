@@ -144,12 +144,12 @@ const dueTag = it => it.closingToday ? '<span class="etag no">⏰ 오늘 마감<
 const sgn = m => (m >= 0 ? '+' : '') + won(m);
 const tone = v => ({ 추천: 'good', 가능: 'good', 조건부: 'mid', 애매: 'mid', 비추천: 'bad', 불가: 'bad' }[v] || 'mid');
 function card(it) {
-  const m = it.invest.margin, c = it.commute?.avg;
+  const m = it.invest.margin, c = it.commute?.avg, unsure = it.invest.marginReliable === false;
   return `<a class="card" href="#item=${encodeURIComponent(it.id)}">
     <div class="row"><span class="nm">${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</span>${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</div>
     ${it.overall.star || it.eligTag || ftag(it) || it.overBudget ? `<div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${etag(it)}${ftag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
-    <div class="stats"><span class="st ${tone(it.invest.verdict)}"><small>투자 ${esc(it.invest.verdict)}</small><b class="mono">${m != null ? sgn(m) : '마진 ?'}</b></span><span class="st ${tone(it.commuteResult.verdict)}"><small>출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span><span class="st plain"><small>${esc(areaRange(it))}</small><b class="mono">${esc(priceRange(it))}</b></span></div>
-    <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${dueTag(it)}<span>${esc(nextStep(it))}</span></div>
+    <div class="stats"><span class="st ${unsure ? 'mid' : tone(it.invest.verdict)}"><small>투자 ${esc(it.invest.verdict)}${unsure ? ' · 시세 불확실' : ''}</small><b class="mono">${m != null ? sgn(m) + (unsure ? '?' : '') : '마진 ?'}</b></span><span class="st ${tone(it.commuteResult.verdict)}"><small>출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span><span class="st plain"><small>${esc(areaRange(it))}</small><b class="mono">${esc(priceRange(it))}</b></span></div>
+    <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${it.closingToday ? '' : dueTag(it)}<span>${esc(nextStep(it))}</span></div>
   </a>`;
 }
 
@@ -199,7 +199,7 @@ function detailView(id) {
     <div class="kpis">
       ${kpi('분양가', best ? won(best.price) : priceRange(it) || '-', '', best ? `전용 ${best.area}㎡` : areaRange(it))}
       ${kpi('주변 시세', best?.comp.estimate ? won(best.comp.estimate) : '-', '', best ? `${best.comp.sample}건 · 반경 ${best.comp.radius / 1000}km` : '비교 거래 부족')}
-      ${kpi('안전마진', inv.margin != null ? sgn(inv.margin) : '?', tone(inv.verdict), `투자 ${inv.verdict}`)}
+      ${kpi('안전마진', inv.margin != null ? sgn(inv.margin) + (inv.marginReliable === false ? '?' : '') : '?', inv.marginReliable === false ? 'mid' : tone(inv.verdict), inv.marginReliable === false ? '시세 이상치 · 확인 필요' : `투자 ${inv.verdict}`)}
       ${kpi('출퇴근', it.commute?.avg ? `${it.commute.avg}분` : '-', tone(com.verdict), R.wp ? esc(R.wp.name) : '직장 미설정')}
       ${kpi('잔금 현금', f ? won(f.need) : '-', f ? f.s : '', f ? esc(f.verdict.replace(/ \(.*\)$/, '')) : '우리 집 정보 필요')}
       ${kpi('자격', esc(el.status), tone(el.status === '경계' ? '애매' : el.status), it.eligTag ? esc(it.eligTag.why || it.eligTag.text) : '')}

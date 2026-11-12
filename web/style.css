@@ -143,3 +143,4 @@ a.banner{display:block;text-decoration:none;color:inherit}
 .actions .mini .btn{padding-block:8px;font-size:.86rem;text-align:center}
 details summary{cursor:pointer;margin-top:10px;color:var(--accent);font-size:.88rem}
 @media (max-width:480px){.actions{grid-template-columns:1fr}}
+.fit{white-space:nowrap;flex-shrink:0}
