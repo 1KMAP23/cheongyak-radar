@@ -20,23 +20,40 @@ export function makeKakao(restKey) {
   }
 
   /** 주소 → {x, y, bcode(법정동 10자리), lawd(시군구 5자리), address} */
-  async function geocode(address) {
-    const clean = address.replace(/\(.*?\)/g, ' ').replace(/\s+일원|\s+일대|\s+외\s*\d*필지/g, '').trim();
-    const tries = [clean, clean.replace(/\s+\S*블[록럭]\S*/g, ''), clean.split(' ').slice(0, 4).join(' ')];
-    for (const q of tries) {
-      const j = await get(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=1`);
-      const d = j.documents?.[0];
-      if (d) {
-        return { x: +d.x, y: +d.y, bcode: d.address?.b_code || null, lawd: (d.address?.b_code || '').slice(0, 5) || null, address: d.address_name, query: q };
-      }
-    }
-    // 주소 검색 실패 시 키워드 검색 (지구·블록 이름만 있는 공고 대비)
-    const j = await get(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(clean)}&size=1`);
-    const d = j.documents?.[0];
-    if (!d) return null;
-    const rev = await get(`https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=${d.x}&y=${d.y}`);
+  async function region(x, y) {
+    const rev = await get(`https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=${x}&y=${y}`);
     const b = rev.documents?.find(r => r.region_type === 'B');
-    return { x: +d.x, y: +d.y, bcode: b?.code || null, lawd: b?.code?.slice(0, 5) || null, address: d.address_name, query: clean, approx: true };
+    return { bcode: b?.code || null, lawd: b?.code?.slice(0, 5) || null, regionName: b?.address_name || null };
+  }
+
+  /**
+   * 주소 → 좌표. 신도시 블록 주소("거모지구 내 A-6블록")처럼 정식 주소가 아닌 경우가 많아서
+   * 1) 주소 검색 2) 키워드 검색(지구명 포함) 순으로 뒤에서부터 단어를 줄여 가며 찾는다.
+   * precise=false면 지구·동 단위 대략 위치라는 뜻.
+   */
+  async function geocode(address) {
+    const clean = address
+      .replace(/\(.*?\)|\[.*?\]/g, ' ')
+      .replace(/\s+(일원|일대|내)(\s|$)/g, ' ')
+      .replace(/외\s*\d*\s*필지/g, ' ')
+      .replace(/[,·]/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+    const words = clean.split(' ');
+    const isBlock = w => /^[A-Z]{1,2}-?\d+|\d+블[록럭]|BL$|블[록럭]$/i.test(w);
+    const core = words.filter(w => !isBlock(w));
+    // "경기도 시흥시"까지 줄이면 시청이 잡히므로 행정주소는 3단어까지만, 지구명만 있는 짧은 이름은 1단어까지
+    const minN = /^(서울|경기|인천)/.test(core[0] || '') ? Math.min(3, core.length) : 1;
+    for (let n = core.length; n >= minN; n--) {
+      const q = core.slice(0, n).join(' ');
+      const a = (await get(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=1`)).documents?.[0];
+      if (a) {
+        const r = a.address?.b_code ? { bcode: a.address.b_code, lawd: a.address.b_code.slice(0, 5) } : await region(a.x, a.y);
+        return { x: +a.x, y: +a.y, ...r, address: a.address_name, query: q, precise: n === core.length && !words.some(isBlock) };
+      }
+      const k = (await get(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=1`)).documents?.[0];
+      if (k) return { x: +k.x, y: +k.y, ...(await region(k.x, k.y)), address: k.address_name, query: q, place: k.place_name, precise: false };
+    }
+    return null;
   }
 
   async function nearby({ x, y }) {

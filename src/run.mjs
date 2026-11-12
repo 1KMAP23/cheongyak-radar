@@ -45,8 +45,13 @@ const items = [...ah, ...onlyLH.map(i => ({ ...i, onlyLH: true }))];
 for (const it of items) {
   const out = { ...it, category: category(it), categoryLabel: CATEGORY_LABEL[category(it)] };
   try {
-    const geo = it.address ? await kakao.geocode(it.address) : await kakao.geocode(it.name.replace(/\(.*?\)|\[.*?\]|입주자.*$|잔여.*$|공공분양.*$|신혼희망.*$/g, ' ').trim());
+    const scattered = /공가세대|매각/.test(it.name); // LH 공가 매각은 여러 단지에 흩어져 있어 위치 하나로 못 정함
+    const geo = scattered ? null
+      : it.address ? await kakao.geocode(it.address)
+      : await kakao.geocode(it.name.replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/(입주자|잔여|추가|공공분양|신혼희망|본청약).*$/, '').trim());
     out.geo = geo;
+    if (scattered) out.analysisNote = '여러 단지 공가 세대를 한꺼번에 파는 공고라 단지별 목록은 공고문에서 확인하세요.';
+    if (geo && !geo.precise) out.analysisNote = `정확한 주소가 아니라 "${geo.query}" 기준 대략 위치로 분석했어요.`;
     if (geo) {
       out.location = await kakao.nearby(geo);
       out.commute = await kakao.commute(geo);
@@ -92,6 +97,7 @@ writeFileSync('dist/report.json', JSON.stringify(report));
 // 세대 정보가 없을 때만 단지별 판정을 로그로 남긴다 (공개 로그에 세대 정보가 섞이지 않게)
 if (!household) for (const i of report.items) {
   const m = i.market?.find(x => x.margin != null);
+  if (m?.comp?.complexes) console.log(`    비교: ${m.comp.complexes.map(c => `${c.name}(${c.kind},${c.built},${c.m}m,${c.n}건,${(c.median / 1e8).toFixed(2)}억)`).join(' / ')} | lawd ${i.geo?.lawd} ${i.geo?.precise ? '' : '대략:' + i.geo?.query}`);
   console.log(`- [${i.invest.verdict}/${i.commuteResult.verdict}] ${i.name} | ${i.categoryLabel} | ${m ? `전용${m.area} 분양${(m.price / 1e8).toFixed(2)}억 시세${(m.comp.estimate / 1e8).toFixed(2)}억(${m.comp.radius}m,${m.comp.sample}건)` : (i.market?.[0]?.comp?.reason || '시세없음')} | 역 ${i.location?.subway?.[0] ? i.location.subway[0].name + ' ' + i.location.subway[0].m + 'm' : '-'} | 출퇴근 ${i.commute?.avg ?? '-'}분${i.analysisError ? ' | ERR ' + i.analysisError : ''}${i.geo ? '' : ' | 좌표없음'}`);
 }
 // 공개 로그에는 세대 정보가 들어가지 않게 개수만 출력

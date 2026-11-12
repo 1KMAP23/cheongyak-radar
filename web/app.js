@@ -159,6 +159,7 @@ function detailView(id) {
       ${(loc.middle || []).map(s => `<div class="mid"><b>중학교</b><span>${esc(s.name)} ${s.m.toLocaleString()}m</span></div>`).join('')}
       <div class="mid"><b>출퇴근</b><span>${esc(com.text)}</span></div>
     </div></section>
+    ${it.analysisNote ? `<div class="banner info">${esc(it.analysisNote)}</div>` : ''}
     ${it.analysisError ? `<div class="banner warn">일부 분석 실패: ${esc(it.analysisError)}</div>` : ''}
     <p class="sub">투자 자문이 아닌 참고 자료예요. 자격·금액·실거주·전매 조건은 반드시 공고문 원문으로 확인하세요.</p>
   </div>`;
