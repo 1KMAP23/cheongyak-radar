@@ -41,9 +41,10 @@ function carValueAt(cars = [], date) {
 
 function childrenAt(h, date) {
   // 출산 예정 자녀는 예정월이 공고일보다 앞서면 태어난 것으로 본다 (실제 출생 후 birth를 고쳐 넣기)
-  return (h.children || []).filter(c => c.birth && `${c.birth}-01` <= date).length;
+  return (h.children || []).filter(c => c.birth && bd(c.birth) <= date).length;
 }
 
+const bd = s => (s && s.length === 7 ? `${s}-01` : s); // 'YYYY-MM' 또는 'YYYY-MM-DD'
 const yearsBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / (365.2425 * 864e5);
 const addYears = (d, n) => `${+d.slice(0, 4) + n}${d.slice(4)}`;
 
@@ -74,7 +75,7 @@ function applicantChecks(it, h, date, cat, T, kids) {
 
   // 소득: 가장 엄격한 특공 기준이 도시근로자 월평균소득 100% 수준. 그보다 낮으면 모든 특공 소득 기준 통과
   const inc = Object.values(h.monthlyIncome || {}).reduce((s, v) => s + (v || 0), 0);
-  const size = Math.max(1, (h.marriageDate ? 2 : 1) + (h.children || []).filter(c => `${c.birth}-01` <= date && !c.expected).length);
+  const size = Math.max(1, (h.marriageDate ? 2 : 1) + (h.children || []).filter(c => bd(c.birth) <= date && !c.expected).length);
   const base = T.urbanIncome100?.[Math.min(size, 5)];
   if (inc && base) {
     const pct = Math.round((inc / base) * 100);
@@ -102,7 +103,7 @@ function applicantChecks(it, h, date, cat, T, kids) {
   const types = [];
   const married7 = h.marriageDate && yearsBetween(h.marriageDate, date) <= 7;
   if (married7) types.push(`신혼부부(혼인 ${yearsBetween(h.marriageDate, date).toFixed(1)}년, 7년 이내 ~${addYears(h.marriageDate, 7).slice(0, 7)})`);
-  const pregnantOrNewborn = (h.children || []).some(c => c.expected || (c.birth && yearsBetween(`${c.birth}-01`, date) <= 2));
+  const pregnantOrNewborn = (h.children || []).some(c => c.expected || (c.birth && yearsBetween(bd(c.birth), date) <= 2));
   if (pregnantOrNewborn) types.push('신생아(임신 중·2세 이하 자녀, 임신진단서 필요)');
   const firstLife = h.neverOwned && (h.incomeTaxYears?.applicant || 0) >= 5 && (married7 || kids || h.marriageDate) && h.householdHeadSince && h.householdHeadSince <= date;
   if (firstLife) types.push('생애최초(평생 무주택·소득세 5년·세대주)');
@@ -149,7 +150,9 @@ export function eligibility(it, h) {
   if (cat === 'equityShare') push('총자산', `${won(total)} → 지분적립형은 공고문 총자산 기준 확인 필요 (통상 3억대)`, total > 4e8 ? 'bad' : 'mid');
   if (cat === 'newlywedHopeTown') {
     const b = T.newlywedHopeTown; const lim = kids >= 2 ? b.birthRelief['2'] : kids === 1 ? b.birthRelief['1'] : b.totalAssetNet;
-    push('총자산', `${won(total)} (부동산+전세보증금+금융+자동차−부채) / 기준 ${won(lim)}${kids ? ' (출산 완화)' : ''}`, total <= lim ? 'good' : 'bad');
+    // 차 가액을 모르는 해에는 차를 빼고 계산하면 통과로 잘못 나오므로, 기준 미만이어도 '확인 필요'로 둔다
+    const s = total > lim ? 'bad' : car.unknown ? 'mid' : 'good';
+    push('총자산', `${won(total)}${car.unknown ? ' + 자동차(가액 미입력)' : ''} (부동산+전세보증금+금융+자동차−부채) / 기준 ${won(lim)}${kids ? ' (출산 완화)' : ''}${car.unknown ? ` → 남은 여유 ${won(lim - total)}, 차량 시가표준액이 이보다 작아야 통과` : ''}`, s);
   }
   if (cat === 'private') {
     push('자산 기준', '민영 일반공급은 자산 기준 없음. 신혼·생애최초 특공 추첨분(소득 초과)은 부동산 3억3100만 이하', (a.realEstate || 0) <= T.privateSpecialLottery.realEstate ? 'good' : 'bad');
