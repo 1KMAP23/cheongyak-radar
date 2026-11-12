@@ -64,11 +64,13 @@ for (const it of items) {
       const uniq = [...new Map((it.models || []).filter(m => m.exclusiveArea && m.topPrice)
         .map(m => [Math.round(m.exclusiveArea), m])).values()];
       const near = t => uniq.slice().sort((a, b) => Math.abs(a.exclusiveArea - t) - Math.abs(b.exclusiveArea - t))[0];
-      const sizes = [...new Set([near(59), near(84), ...uniq.sort((a, b) => Math.abs(a.exclusiveArea - 84) - Math.abs(b.exclusiveArea - 84))].filter(Boolean))].slice(0, 3);
+      const sizes = [...new Set([near(84), near(59), ...uniq.sort((a, b) => Math.abs(a.exclusiveArea - 84) - Math.abs(b.exclusiveArea - 84))].filter(Boolean))].slice(0, 3);
       out.market = [];
+      let pinnedKeys = null;
       for (const m of sizes) {
         const newTown = !geo.precise || /지구|블[록럭]|BL|택지|신도시/.test(`${it.address || ''} ${it.name}`);
-        const comp = await comparables({ key: KEY, kakao, point: geo, lawd: geo.lawd, area: m.exclusiveArea, newTown, name: shortName(it.name).replace(/ 잔여$/, '') });
+        const comp = await comparables({ key: KEY, kakao, point: geo, lawd: geo.lawd, area: m.exclusiveArea, newTown, name: shortName(it.name).replace(/ 잔여$/, ''), prefer: pinnedKeys });
+        if (!pinnedKeys && comp.keys && comp.method !== '같은 단지 실거래') pinnedKeys = comp.keys;
         const tax = Math.round(acquisitionTax(m.topPrice));
         // 분양가에 빠져 있는 발코니 확장비 추정 (전용 ㎡당 20만원, 84㎡ 약 1,700만). 정확한 금액은 공고문 옵션표
         const balcony = Math.round(m.exclusiveArea * 2e5 / 1e5) * 1e5;
@@ -85,6 +87,14 @@ for (const it of items) {
   out.invest = invest(it, { models: it.models, location: out.location, market: out.market });
   try { out.buzz = await buzz(kakao, out); } catch (e) { out.buzz = null; }
   try { out.competition = await competition(KEY, it); } catch (e) { out.competition = null; }
+  // 시장 반응으로 검산: 마진이 1억 넘게 나왔는데 경쟁률이 2:1도 안 되면 시세 추정이 과대했을 가능성이 크다
+  const rate = out.competition?.maxRate;
+  if (rate != null && rate < 2) for (const r of out.market || []) if (r.reliable && r.margin >= 1e8) {
+    r.reliable = false; r.doubt = `경쟁률 최고 ${rate}:1로 낮음`;
+    out.invest.marginReliable = false;
+    out.invest.notes.push({ k: '시장 반응', v: `안전마진 ${Math.round(r.margin / 1e6) / 100}억으로 나왔지만 경쟁률이 최고 ${rate}:1뿐 → 브랜드·규모 차이로 시세가 과대 추정됐을 수 있어요`, s: 'bad' });
+    if (out.invest.verdict === '추천') out.invest.verdict = '조건부';
+  }
   // 🔥 핫 = 주변 시세보다 얼마나 싼가(안전마진). SNS 언급은 참고용(buzzLevel)으로만 쓴다
   const mh = marginHot(out.market);
   out.hot = mh.level; out.hotWhy = mh.why;
