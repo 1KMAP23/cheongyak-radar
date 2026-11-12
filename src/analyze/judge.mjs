@@ -247,22 +247,53 @@ export function overall(elig, inv, com) {
 }
 
 // ── 나에게 맞는 순서: 적합도 점수 (100점) ───────────────────
-// 자격 30 + 안전마진 30 + 출퇴근 25 + 입지 10 + 화제성 5. 마감 임박은 점수가 아니라 '오늘 마감' 구역으로 따로 올린다.
+// 안전마진 40 + 출퇴근 30 + 입지 25(지하철 10·학군 10·규모 5) + 화제성 5.
+// 자격은 점수에 넣지 않는다. 자격이 안 돼도 똑같이 순위를 매기고, 화면에 ❌ 자격 미달로 따로 표시한다.
 export function fitScore(it) {
   const parts = [];
-  const e = { '가능': 30, '경계': 18, '확인 필요': 12, '불가': 0 }[it.eligibility.status] ?? 10;
-  parts.push({ k: '자격', v: e, max: 30, why: it.eligibility.status });
   const m = it.invest.margin;
-  const mv = m == null ? 10 : Math.max(0, Math.min(30, Math.round((m / 3e8) * 30)));
-  parts.push({ k: '안전마진', v: mv, max: 30, why: m == null ? '불확실' : won(m) });
+  const mv = m == null ? 12 : Math.max(0, Math.min(40, Math.round((m / 3e8) * 40)));
+  parts.push({ k: '안전마진', v: mv, max: 40, why: m == null ? '시세 불확실' : `${m >= 0 ? '+' : ''}${won(m)} (3억 이상 만점)` });
+
   const c = it.commute?.avg;
-  const cv = c == null ? 5 : c <= 30 ? 25 : c <= 45 ? 15 : c <= 60 ? 6 : 0;
-  parts.push({ k: '출퇴근', v: cv, max: 25, why: c == null ? '계산 안 됨' : `${c}분` });
-  const lv = Math.max(0, Math.min(10, 5 + (it.invest.plus - it.invest.minus) * 2));
-  parts.push({ k: '입지', v: lv, max: 10, why: `가점 ${it.invest.plus} · 감점 ${it.invest.minus}` });
+  const cv = c == null ? 6 : c <= 20 ? 30 : c <= 30 ? 26 : c <= 40 ? 18 : c <= 45 ? 14 : c <= 60 ? 6 : 0;
+  parts.push({ k: '출퇴근', v: cv, max: 30, why: c == null ? '경로 계산 안 됨' : `평균 ${c}분 (20분 이내 만점)` });
+
+  const loc = it.location || {};
+  const st = loc.subway?.[0];
+  const sv = !st ? 0 : st.m <= 500 ? 10 : st.m <= 800 ? 8 : st.m <= 1200 ? 5 : st.m <= 2000 ? 2 : 0;
+  const el = loc.elementary?.[0], ac = loc.academies1km ?? 0;
+  const ev = !el ? 0 : el.m <= 300 ? 5 : el.m <= 500 ? 4 : el.m <= 800 ? 2 : 1;
+  const av = ac >= 100 ? 5 : ac >= 50 ? 4 : ac >= 25 ? 3 : ac >= 10 ? 2 : ac >= 3 ? 1 : 0;
+  const u = it.totalUnits;
+  const uv = u == null ? 2 : u >= 1000 ? 5 : u >= 500 ? 3 : u >= 300 ? 2 : 0;
+  parts.push({ k: '입지', v: sv + ev + av + uv, max: 25,
+    why: [st ? `역 ${st.m.toLocaleString()}m ${sv}/10` : '역 없음 0/10', `학군 ${ev + av}/10 (${el ? `초교 ${el.m}m` : '초교 없음'}·학원 ${ac}곳)`, `규모 ${uv}/5${u ? ` (${u.toLocaleString()}세대)` : ''}`].join(' · ') });
+
   const hv = [0, 3, 5][it.hot || 0];
-  parts.push({ k: '화제성', v: hv, max: 5, why: ['보통', '핫', '매우 핫'][it.hot || 0] });
-  let total = parts.reduce((s, p) => s + p.v, 0);
-  if (it.eligibility.status === '불가') total = Math.min(total, 20); // 자격이 안 되면 다른 점수가 높아도 아래로
-  return { total, parts };
+  parts.push({ k: '화제성', v: hv, max: 5, why: ['보통', '🔥 핫', '🔥🔥 매우 핫'][it.hot || 0] });
+  return { total: parts.reduce((s, p) => s + p.v, 0), parts };
+}
+
+/** 자격이 안 되거나 경계인 이유를 짧게: "❌ 자격 미달 (총자산·세대주)" */
+export function eligibilityTag(e) {
+  const bad = e.checks.filter(c => c.s === 'bad').map(c => c.k);
+  const mid = e.checks.filter(c => c.s === 'mid' && /자동차|총자산|부동산|세대주|소득|청약통장/.test(c.k)).map(c => c.k);
+  if (e.status === '불가') return { icon: '❌', text: '자격 미달', why: [...new Set(bad)].join('·') };
+  if (e.status === '경계') return { icon: '⚠️', text: '자격 경계', why: [...new Set([...bad, ...mid])].join('·') };
+  return null;
+}
+
+/** 단지 이름 앞에 붙일 지역: 서울·인천은 "서울 중화", 경기는 "용인 마북" */
+export function placeLabel(it) {
+  const a = (it.geo?.address || it.address || '').replace(/\(.*?\)/g, ' ').split(/\s+/).filter(Boolean);
+  const sido = (a[0] || it.region || '').replace(/특별시|광역시|특별자치시|특별자치도|도$/, '').replace('경기', '경기');
+  const city = a.find((w, i) => i > 0 && /시$/.test(w))?.replace(/시$/, '');
+  const dong = a.find(w => /(동|읍|면|가)$/.test(w) && !/(^|\s)(구|시)$/.test(w))?.replace(/\d*가$/, '').replace(/\d*동$/, '').replace(/(읍|면)$/, '');
+  if (!a.length) {
+    const m = it.name.match(/\(([^)]*?(서울|수원|용인|광교|안성|고양|시흥|남양주|인천)[^)]*)\)/);
+    return m ? m[1].replace(/·/g, ' ') : (it.region || '');
+  }
+  const head = /^(서울|인천)/.test(sido) ? sido.slice(0, 2) : (city || sido.slice(0, 2));
+  return [head, dong].filter(Boolean).join(' ');
 }

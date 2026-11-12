@@ -4,7 +4,7 @@ import { collectApplyhome } from './collect/applyhome.mjs';
 import { collectLH, crossCheck } from './collect/lh.mjs';
 import { makeKakao } from './collect/kakao.mjs';
 import { comparables } from './collect/molit.mjs';
-import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL, fitScore } from './analyze/judge.mjs';
+import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL, fitScore, eligibilityTag, placeLabel } from './analyze/judge.mjs';
 import { buzz, hotLevel } from './collect/buzz.mjs';
 import { competition, competitionStatus } from './collect/competition.mjs';
 
@@ -82,6 +82,9 @@ for (const it of items) {
   out.hot = hotLevel(out.buzz, out.competition);
   out.closingToday = it.window?.end === from;
   out.fit = fitScore(out);
+  out.place = placeLabel(out);
+  out.eligTag = eligibilityTag(out.eligibility);
+  out.displayName = `(${out.place}) ${it.name}`;
   report.items.push(out);
 }
 
@@ -97,11 +100,11 @@ report.summary = {
   conditional: count(i => i.invest.verdict === '조건부'),
   notRecommend: count(i => i.invest.verdict === '비추천'),
   closingToday: count(i => i.window?.end === from),
-  starNames: report.items.filter(i => i.overall.star).map(i => i.name),
+  starNames: report.items.filter(i => i.overall.star).map(i => i.displayName),
   hot: count(i => i.hot > 0),
-  hotNames: report.items.filter(i => i.hot > 0).sort((a, b) => b.hot - a.hot || b.buzz.score - a.buzz.score).map(i => i.name),
-  topNames: report.items.filter(i => i.eligibility.status !== '불가').slice(0, 3).map(i => i.name),
-  closingTodayNames: report.items.filter(i => i.closingToday && i.eligibility.status !== '불가').map(i => i.name),
+  hotNames: report.items.filter(i => i.hot > 0).sort((a, b) => b.hot - a.hot || b.buzz.score - a.buzz.score).map(i => i.displayName),
+  topNames: report.items.slice(0, 3).map(i => i.displayName + (i.eligTag?.icon === '❌' ? ' ❌' : '')),
+  closingTodayNames: report.items.filter(i => i.closingToday).map(i => i.displayName + (i.eligTag?.icon === '❌' ? ' ❌' : '')),
   recommendNames: report.items.filter(i => i.invest.verdict === '추천').map(i => i.name),
 };
 

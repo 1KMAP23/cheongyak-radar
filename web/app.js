@@ -75,8 +75,8 @@ function match(it) {
 function listView() {
   const s = R.summary;
   const items = R.items.filter(match);
-  // 오늘 마감은 맨 위에 따로 (자격 불가는 제외), 나머지는 적합도 순 (서버에서 정렬해서 옴)
-  const today = items.filter(i => i.closingToday && i.eligibility.status !== '불가');
+  // 오늘 마감은 맨 위에 따로, 나머지는 적합도 순 (서버에서 정렬해서 옴). 자격 미달도 빼지 않고 ❌ 태그로 표시
+  const today = items.filter(i => i.closingToday);
   const rest = items.filter(i => !today.includes(i));
   const hot = R.items.filter(i => i.hot > 0).sort((a, b) => b.hot - a.hot || (b.buzz?.score || 0) - (a.buzz?.score || 0)).slice(0, 6);
   const warn = R.warnings.length ? `<div class="banner warn">⚠️ ${R.warnings.map(esc).join('<br>')}</div>` : '';
@@ -93,16 +93,17 @@ function listView() {
     ${only}
     ${today.length ? `<h2 class="sec">⏰ 오늘 마감 <span class="sub">${today.length}건</span></h2><div class="list">${today.map(card).join('')}</div>` : ''}
     ${hot.length && filter === 'all' ? `<h2 class="sec">🔥 요즘 핫한 청약 <span class="sub">최근 2주 블로그·카페·영상 언급 많은 순</span></h2><div class="hotrow">${hot.map(hotCard).join('')}</div>` : ''}
-    <h2 class="sec">👍 나에게 맞는 순 <span class="sub">자격·안전마진·출퇴근·입지·화제성 점수</span></h2>
+    <h2 class="sec">👍 나에게 맞는 순 <span class="sub">안전마진 40 · 출퇴근 30 · 입지 25 · 화제성 5</span></h2>
     <div class="list">${rest.length ? rest.map(card).join('') : '<p class="sub">조건에 맞는 공고가 없어요.</p>'}</div>
     <p class="sub">투자 자문이 아닌 참고 자료예요. 자격·금액은 반드시 공고문 원문으로 확인하세요.</p>
   </div>`;
   app.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => { filter = b.dataset.f; store.set('cy-filter', filter); listView(); }));
 }
+const etag = it => it.eligTag ? ` <span class="etag ${it.eligTag.icon === '❌' ? 'no' : 'warn'}">${it.eligTag.icon} ${esc(it.eligTag.text)}${it.eligTag.why ? `<small> (${esc(it.eligTag.why)})</small>` : ''}</span>` : '';
 function card(it) {
-  const off = it.eligibility.status === '불가';
+  const off = false; // 자격 미달도 순위는 그대로 두고 태그로만 표시
   return `<a class="card${off ? ' off' : ''}" href="#item=${encodeURIComponent(it.id)}">
-    <div class="row"><span class="nm">${it.hot ? `<span class="fire" title="화제성">${'🔥'.repeat(it.hot)}</span> ` : ''}${esc(it.name)}</span><span class="fitbox">${due(it)}${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</span></div>
+    <div class="row"><span class="nm">${it.hot ? `<span class="fire" title="화제성">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.name)}${etag(it)}</span><span class="fitbox">${due(it)}${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</span></div>
     <div class="pills">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${vpill('자격', it.eligibility.status)}${vpill('투자', it.invest.verdict)}${vpill('출퇴근', it.commuteResult.verdict)}</div>
     <div class="meta"><span>${esc(it.region)}</span><span class="tag">${esc(it.categoryLabel)}</span>${it.onlyLH ? '<span class="tag">LH 단독</span>' : ''}<span>${esc(schedule(it))}</span></div>
     <div class="meta mono">${esc([areaRange(it), priceRange(it), it.invest.margin != null ? `안전마진 ${it.invest.margin >= 0 ? '+' : ''}${won(it.invest.margin)}` : '', it.commute?.avg ? `출퇴근 ${it.commute.avg}분` : ''].filter(Boolean).join(' · '))}</div>
@@ -112,7 +113,8 @@ function card(it) {
 function hotCard(it) {
   const b = it.buzz || {};
   const plus = k => (b[k + 'Capped'] ? '+' : '');
-  return `<a class="hot" href="#item=${encodeURIComponent(it.id)}"><span class="nm">${'🔥'.repeat(it.hot)} ${esc(it.name)}</span>
+  return `<a class="hot" href="#item=${encodeURIComponent(it.id)}"><span class="nm">${'🔥'.repeat(it.hot)} ${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.name)}${etag(it)}</span>
+    <span class="why">${esc(it.competition?.maxRate >= 10 ? `청약 경쟁률 최고 ${it.competition.maxRate}:1` : b.reason || '')}</span>
     <span class="sub">블로그 ${b.blog ?? 0}${plus('blog')} · 카페 ${b.cafe ?? 0} · 영상 ${b.vclip ?? 0}${it.competition?.maxRate ? ` · 최고 ${it.competition.maxRate}:1` : ''}</span>
     <span class="pills">${vpill('투자', it.invest.verdict)}${vpill('자격', it.eligibility.status)}</span></a>`;
 }
@@ -130,7 +132,7 @@ function detailView(id) {
   const comps = (it.market || []).find(m => m.comp.complexes)?.comp.complexes || [];
   app.innerHTML = `<div class="wrap">
     <a class="btn back" href="#">← 목록</a>
-    <div><h1>${esc(it.name)}</h1><p class="sub">${esc(it.address || it.region)}</p></div>
+    <div><h1>${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.name)}</h1><p class="sub">${esc(it.address || it.region)}</p>${it.eligTag ? `<p style="margin-top:6px">${etag(it)}</p>` : ''}</div>
     <div class="pills">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${vpill('자격', el.status)}${vpill('투자', inv.verdict)}${vpill('출퇴근', com.verdict)}</div>
     <div class="actions">
       ${it.noticeUrl ? `<a class="btn primary" href="${esc(it.noticeUrl)}" target="_blank" rel="noopener">공고문 원문 보기 ↗</a>` : ''}
@@ -147,7 +149,7 @@ function detailView(id) {
     </div></section>
 
     ${it.fit ? `<section class="panel"><h2>나에게 맞는 정도 <span class="mono">${it.fit.total}점</span> <span class="sub">/ 100</span></h2><div class="bars">${it.fit.parts.map(p => `<div><b>${esc(p.k)}</b><span class="bar"><i style="width:${Math.round(p.v / p.max * 100)}%"></i></span><span class="mono">${p.v}/${p.max}</span><span class="sub">${esc(p.why)}</span></div>`).join('')}</div></section>` : ''}
-    ${it.buzz ? `<section class="panel"><h2>화제성 ${it.hot ? '🔥'.repeat(it.hot) : ''}</h2><p>최근 ${it.buzz.days}일 다음 검색 "${esc(it.buzz.query)}": 블로그 <b class="mono">${it.buzz.blog}${it.buzz.blogCapped ? '+' : ''}</b> · 카페 <b class="mono">${it.buzz.cafe}</b> · 영상 <b class="mono">${it.buzz.vclip}</b> · 웹문서 <b class="mono">${it.buzz.web}${it.buzz.webCapped ? '+' : ''}</b>${it.competition?.maxRate ? ` · 청약 경쟁률 최고 <b class="mono">${it.competition.maxRate}:1</b>` : ''}</p><p class="sub" style="margin-top:6px">블로그에는 분양 홍보 글이 섞여 있어서 화제성이 곧 좋은 단지라는 뜻은 아니에요. 카페·영상 언급에 가중치를 줬어요. 스레드·인스타그램은 공개 검색이 안 돼서 포함하지 못했어요.</p></section>` : ''}
+    ${it.buzz ? `<section class="panel"><h2>화제성 ${it.hot ? '🔥'.repeat(it.hot) : ''}</h2>${it.buzz.reason ? `<p><b>${esc(it.buzz.reason)}</b></p>` : ''}<p>최근 ${it.buzz.days}일 다음 검색 "${esc(it.buzz.query)}": 블로그 <b class="mono">${it.buzz.blog}${it.buzz.blogCapped ? '+' : ''}</b> · 카페 <b class="mono">${it.buzz.cafe}</b> · 영상 <b class="mono">${it.buzz.vclip}</b> · 웹문서 <b class="mono">${it.buzz.web}${it.buzz.webCapped ? '+' : ''}</b>${it.competition?.maxRate ? ` · 청약 경쟁률 최고 <b class="mono">${it.competition.maxRate}:1</b>` : ''}</p><p class="sub" style="margin-top:6px">블로그에는 분양 홍보 글이 섞여 있어서 화제성이 곧 좋은 단지라는 뜻은 아니에요. 카페·영상 언급에 가중치를 줬어요. 스레드·인스타그램은 공개 검색이 안 돼서 포함하지 못했어요.</p></section>` : ''}
     <section class="panel"><h2>기본 정보</h2><dl class="facts">
       <div><dt>공급 유형</dt><dd>${esc(it.categoryLabel)}${it.detailType ? ` (${esc(it.detailType)})` : ''}</dd></div>
       <div><dt>총 세대수</dt><dd class="mono">${it.totalUnits ? it.totalUnits.toLocaleString() + '세대' : '-'}</dd></div>

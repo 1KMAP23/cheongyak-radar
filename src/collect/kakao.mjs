@@ -61,7 +61,9 @@ export function makeKakao(restKey) {
       (await get(`https://dapi.kakao.com/v2/local/search/category.json?category_group_code=${code}&x=${x}&y=${y}&radius=${radius}&sort=distance&size=15`)).documents || [];
     const subway = (await cat('SW8', 2000)).map(d => ({ name: d.place_name, line: d.category_name.split('>').pop().trim(), m: +d.distance }));
     const schools = (await cat('SC4', 1500)).map(d => ({ name: d.place_name, m: +d.distance }));
-    const academies = (await cat('AC5', 1000)).length; // 학원 수 (1km, 최대 15까지만 셈)
+    // 학원 수: 첫 페이지만 받아도 meta.total_count에 1km 안 전체 개수가 온다
+    const ac = await get(`https://dapi.kakao.com/v2/local/search/category.json?category_group_code=AC5&x=${x}&y=${y}&radius=1000&size=1`);
+    const academies = ac.meta?.total_count ?? 0;
     return {
       subway: subway.slice(0, 3),
       elementary: schools.filter(s => /초등학교/.test(s.name)).slice(0, 2),

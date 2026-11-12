@@ -88,3 +88,9 @@ textarea{width:100%;min-height:120px;font:12px var(--mono);border-radius:10px;bo
 .bars>div .sub{grid-column:2/4}
 .bar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.place{color:var(--muted);font-weight:500}
+.etag{display:inline-block;font-size:.74rem;font-weight:700;border-radius:6px;padding:1px 6px;vertical-align:2px;white-space:normal}
+.etag small{font-weight:500;font-size:.72rem}
+.etag.no{background:var(--bad-soft);color:var(--bad)}
+.etag.warn{background:var(--warn-soft);color:var(--warn)}
+.hot .why{font-size:.82rem;color:var(--ink)}

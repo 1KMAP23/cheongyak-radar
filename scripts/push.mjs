@@ -8,7 +8,8 @@ webpush.setVapidDetails('mailto:noreply@example.com', process.env.VAPID_PUBLIC_K
 
 const s = JSON.parse(readFileSync('dist/summary.json', 'utf8'));
 const lines = [];
-const short = n => n.replace(/\(.*?\)|\[.*?\]/g, '').replace(/(입주자|잔여세대|추가|공공분양주택|본청약).*$/, '').trim().slice(0, 18);
+// "(서울 중화) 중화역 라온프라이빗 센트로" → 지역 괄호는 살리고 뒤쪽 공고 문구만 줄인다
+const short = n => { const m = n.match(/^(\([^)]*\))\s*(.*)$/); const head = m ? m[1] : ''; const body = (m ? m[2] : n).replace(/\(.*?\)|\[.*?\]/g, '').replace(/(입주자|잔여세대|추가|공공분양주택|본청약).*$/, '').trim().slice(0, 16); return `${head} ${body}`.trim(); };
 if (s.star) lines.push(`⭐ ${s.starNames.slice(0, 2).map(short).join(', ')}`);
 if (s.closingTodayNames?.length) lines.push(`⏰ 오늘 마감: ${s.closingTodayNames.slice(0, 2).map(short).join(', ')}${s.closingTodayNames.length > 2 ? ` 외 ${s.closingTodayNames.length - 2}` : ''}`);
 if (s.topNames?.length) lines.push(`👍 나에게 맞는 순: ${s.topNames.slice(0, 2).map(short).join(', ')}`);
