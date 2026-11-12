@@ -1,0 +1,29 @@
+{
+  "_note": "공고문에 기준이 있으면 공고문 값이 우선. 여기는 공고문에서 못 읽었을 때의 기본값(연도별).",
+  "2026": {
+    "publicSale": {
+      "appliesTo": "공공분양 특별공급 + 전용 60㎡ 이하 일반공급 (기관추천·60㎡ 초과 일반공급 미적용)",
+      "realEstate": 215500000,
+      "car": 45420000,
+      "birthRelief": {
+        "1": { "realEstate": 237050000, "car": 49960000 },
+        "2": { "realEstate": 258600000, "car": 54510000 }
+      },
+      "source": "https://www.lh.or.kr/menu.es?mid=a10402010100"
+    },
+    "newlywedHopeTown": {
+      "totalAssetNet": 362000000,
+      "birthRelief": { "1": 397000000, "2": 431000000 },
+      "counts": "부동산+금융+자동차+임차보증금-부채",
+      "source": "https://www.lh.or.kr/menu.es?mid=a10402010200"
+    },
+    "privateSpecialLottery": {
+      "appliesTo": "민영 신혼부부·생애최초 특공 중 소득기준 초과 추첨분",
+      "realEstate": 331000000,
+      "source": "https://www.applyhome.co.kr/ar/ara/selectSubscrptIntroSpetialView.do"
+    },
+    "equityShare": {
+      "note": "지분적립형은 공고문마다 총자산 기준을 따로 적음. 공고문 값 필수, 없으면 '확인 필요'."
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "_note": "예시 파일. 실제 값은 config/household.json에 넣고 커밋하지 않는다.",
+  "applicant": "spouse",
+  "householdHeadSince": "YYYY-MM-DD",
+  "residence": { "sido": "", "sigungu": "", "since": "YYYY-MM-DD" },
+  "marriageDate": "YYYY-MM-DD",
+  "noHomeSince": "YYYY-MM-DD",
+  "children": [ { "birth": "YYYY-MM", "expected": true } ],
+  "pastWins": [],
+  "incomeTaxYears": { "applicant": 5, "partner": 0 },
+  "accounts": {
+    "applicant": { "bank": "", "openedAt": "YYYY-MM-DD", "paidCount": 0, "recognizedAmount": 0 },
+    "partner":   { "bank": "", "openedAt": "YYYY-MM-DD", "paidCount": 0, "recognizedAmount": 0 }
+  },
+  "monthlyIncome": { "applicant": 0, "partner": 0 },
+  "assets": {
+    "realEstate": 0,
+    "jeonseDeposit": 0,
+    "financial": 0,
+    "debt": 0,
+    "cars": [ { "name": "", "registeredAt": "YYYY-MM-DD", "baseValue": 0, "inHousehold": true } ]
+  },
+  "cashAvailable": 0,
+  "monthlyRepayCapacity": 0,
+  "prefs": {
+    "regions": ["서울", "경기", "인천"],
+    "maxCommuteMin": 45,
+    "areas": [59, 84],
+    "maxPrice": 0,
+    "allowResidenceDuty": true,
+    "notifyAt": "07:00"
+  }
+}

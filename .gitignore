@@ -1,0 +1,6 @@
+.env
+config/household.json
+node_modules/
+data/raw/
+*.log
+.DS_Store
