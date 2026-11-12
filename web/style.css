@@ -144,3 +144,24 @@ a.banner{display:block;text-decoration:none;color:inherit}
 details summary{cursor:pointer;margin-top:10px;color:var(--accent);font-size:.88rem}
 @media (max-width:480px){.actions{grid-template-columns:1fr}}
 .fit{white-space:nowrap;flex-shrink:0}
+/* 59·84 기준 */
+.stats{grid-template-columns:1fr 1fr .72fr}
+.st.none{opacity:.55}
+.st small .mono{font-size:.72rem}
+.hotwhy{font-size:.82rem;color:var(--good);font-weight:600}
+.hotwhy.muted{color:var(--muted);font-weight:400}
+.sizes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.size{border-radius:12px;padding:10px 12px;display:grid;gap:6px;background:var(--surface);border:1px solid var(--line);min-width:0}
+.size .h{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.size .h b{font-size:1.05rem}
+.size .h small{color:var(--muted);font-size:.72rem}
+.size dl{margin:0;display:grid;gap:3px}
+.size dl div{display:flex;justify-content:space-between;gap:6px;font-size:.84rem}
+.size dt{color:var(--muted)}
+.size dd{margin:0}
+.size .m dd{font-weight:700;font-size:1rem}
+.size.good{border-color:transparent;background:var(--good-soft)}.size.good .m dd{color:var(--good)}
+.size.mid{border-color:transparent;background:var(--warn-soft)}.size.mid .m dd{color:var(--warn)}
+.size.bad{border-color:transparent;background:var(--bad-soft)}.size.bad .m dd{color:var(--bad)}
+.size.none{opacity:.6}
+.kpis.two{grid-template-columns:1fr 1fr}

@@ -1,6 +1,6 @@
 // 청약 레이더 웹앱: 잠금 해제 → 목록 → 단지별 분석 페이지 → 공고문 원문 링크
 // 자격·점수는 이 기기에 저장된 '우리 집 정보'로 계산한다 (서버 데이터에는 세대 정보가 없다)
-import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, funding, affordable, brandOf } from './lib/rules.js';
+import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo } from './lib/rules.js';
 import { householdView } from './household.js';
 const VAPID_PUBLIC = 'BDGbFHT5-WKQMTzp1Y_tj_5ByKKSqmjqoVrW-P67Yf2_EUMiaAS6Xabst53usz-kz1tCr6UA8OA_vk-gl47xPCA';
 const app = document.getElementById('app');
@@ -31,7 +31,6 @@ function enrich(raw) {
     it.overall = overall(it.eligibility, it.invest, it.commuteResult);
     it.fit = fitScore(it);
     it.eligTag = eligibilityTag(it.eligibility);
-    it.funding = funding(it, HH, raw.thresholds);
     const minPrice = Math.min(...(it.models || []).map(m => m.topPrice).filter(Boolean));
     it.overBudget = HH?.prefs?.maxPrice && isFinite(minPrice) && minPrice > HH.prefs.maxPrice;
     items.push(it);
@@ -39,7 +38,7 @@ function enrich(raw) {
   items.sort((a, b) => (b.overall.star - a.overall.star) || (b.fit.total - a.fit.total) || (a.window?.end || '').localeCompare(b.window?.end || ''));
   const count = f => items.filter(f).length;
   const stale = Date.now() - Date.parse(raw.generatedAt) > 20 * 3600e3;
-  return { ...raw, items, HH, wp, hidden, ended, today, stale, afford: affordable(HH, raw.thresholds),
+  return { ...raw, items, HH, wp, hidden, ended, today, stale,
     summary: { total: items.length, star: count(i => i.overall.star), recommend: count(i => i.invest.verdict === '추천'), conditional: count(i => i.invest.verdict === '조건부'), notRecommend: count(i => i.invest.verdict === '비추천'), hot: count(i => i.hot > 0) } };
 }
 
@@ -96,10 +95,9 @@ const areaRange = it => { const a = (it.models || []).map(m => Math.round(m.excl
 const FILTERS = [
   ['all', '전체', () => true],
   ['ok', '자격 됨', it => it.eligibility.status !== '불가'],
-  ['fund', '💰 자금 됨', it => it.funding && it.funding.s !== 'bad'],
   ['near', '🚗 45분 이내', it => it.commuteResult.verdict === '가능' || it.commuteResult.verdict === '애매'],
   ['rec', '투자 추천', it => it.invest.verdict === '추천'],
-  ['hot', '🔥 핫', it => it.hot > 0],
+  ['hot', '🔥 시세보다 2억+ 싼 곳', it => it.hot > 0],
   ['star', '⭐ 강력 추천', it => it.overall.star],
 ];
 const match = it => (FILTERS.find(f => f[0] === filter) || FILTERS[0])[2](it);
@@ -117,38 +115,45 @@ function listView() {
   // 오늘 마감은 맨 위에 따로, 나머지는 적합도 순. 자격 미달도 빼지 않고 ❌ 태그로 표시
   const today = items.filter(i => i.closingToday);
   const rest = items.filter(i => !today.includes(i));
-  const hot = R.items.filter(i => i.hot > 0).sort((a, b) => b.hot - a.hot || (b.buzz?.score || 0) - (a.buzz?.score || 0)).slice(0, 6);
+  const hot = R.items.filter(i => i.hot > 0).sort((a, b) => (b.invest.margin || 0) - (a.invest.margin || 0)).slice(0, 6);
   const banners = [
     R.warnings.length && `<div class="banner warn">⚠️ ${R.warnings.map(esc).join('<br>')}</div>`,
     R.stale && `<div class="banner warn">마지막 분석이 ${new Date(R.generatedAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}이에요. 주말·공휴일엔 갱신이 없어요. 접수 끝난 공고 ${R.ended}건은 뺐어요.</div>`,
     !R.HH && '<a class="banner info" href="#household"><b>🏠 우리 집 정보를 입력해 주세요 →</b><br><span class="sub">자격(❌·⚠️)·자금·출퇴근을 이 기기에서 판정해요.</span></a>',
   ].filter(Boolean).join('');
-  const af = R.afford;
-  const afford = af ? `<a class="afford" href="#household"><span>💰 감당 가능한 분양가</span><b class="mono">새 분양 ~${won(af.newSale)}</b><b class="mono">줍줍 ~${won(af.soon)}</b>${af.soonWithJeonse > af.soon ? `<small>전세금 먼저 빼면 줍줍 ~${won(af.soonWithJeonse)}</small>` : ''}${af.limitedByContract ? '<small>계약금(10%)이 먼저 막혀요</small>' : ''}</a>` : '';
   app.innerHTML = `<div class="wrap">
     <div class="top"><div><h1>청약 레이더</h1><p class="sub">${new Date(R.generatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} 업데이트 · ${R.items.length}건</p></div>
       <span class="topbtns"><a class="btn" href="#household" aria-label="우리 집 정보">🏠</a><a class="btn" href="#settings" aria-label="설정">⚙︎</a></span></div>
-    ${banners}${afford}
+    ${banners}
     <div class="chips scroll" role="group" aria-label="필터">${shown.map(([k, l, f]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l} <b class="mono">${R.items.filter(f).length}</b></button>`).join('')}</div>
     ${today.length ? `<h2 class="sec">⏰ 오늘 마감 <span class="sub">${today.length}건</span></h2><div class="list">${today.map(card).join('')}</div>` : ''}
-    ${hot.length && filter === 'all' ? `<h2 class="sec">🔥 요즘 핫한 청약</h2><div class="hotrow">${hot.map(hotCard).join('')}</div>` : ''}
-    <h2 class="sec">👍 나에게 맞는 순 <span class="sub">마진 40 · 출퇴근 30 · 입지 25 · 화제 5</span></h2>
+    ${hot.length && filter === 'all' ? `<h2 class="sec">🔥 핫한 청약 <span class="sub">주변 시세보다 2억 이상 싼 곳</span></h2><div class="hotrow">${hot.map(hotCard).join('')}</div>` : ''}
+    <h2 class="sec">👍 나에게 맞는 순 <span class="sub">마진 40 · 출퇴근 30 · 입지 25 · SNS 5</span></h2>
     <div class="list">${rest.length ? rest.map(card).join('') : '<p class="sub">조건에 맞는 공고가 없어요.</p>'}</div>
     <p class="sub">청약홈 ${R.sources?.applyhome?.ok === false ? '수집 실패' : '전체'} + LH 단독 공고 ${R.crossCheck?.onlyLH?.length ?? 0}건 포함${R.hidden ? ` · 관심 지역 밖 ${R.hidden}건 숨김` : ''}.<br>투자 자문이 아닌 참고 자료예요. 자격·금액은 반드시 공고문 원문으로 확인하세요.</p>
   </div>`;
   app.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => { filter = b.dataset.f; store.set('cy-filter', filter); listView(); }));
 }
 const etag = it => it.eligTag ? `<span class="etag ${it.eligTag.icon === '❌' ? 'no' : 'warn'}">${it.eligTag.icon} ${esc(it.eligTag.text)}${it.eligTag.why ? `<small> (${esc(it.eligTag.why)})</small>` : ''}</span>` : '';
-const ftag = it => !it.funding ? '' : it.funding.s === 'bad' ? `<span class="etag no">💸 ${esc(it.funding.verdict.replace(/ \(.*\)$/, ''))}</span>` : it.funding.s === 'mid' ? '<span class="etag warn">💰 전세금 먼저 빼야 가능</span>' : '';
 const dueTag = it => it.closingToday ? '<span class="etag no">⏰ 오늘 마감</span>' : it.window?.end ? `<span class="tag mono">D-${Math.round((Date.parse(it.window.end) - Date.parse(R.today)) / 864e5)}</span>` : '';
 const sgn = m => (m >= 0 ? '+' : '') + won(m);
+const mtone = m => (m == null ? 'plain' : m >= 2e8 ? 'good' : m >= 1e8 ? 'mid' : 'bad');
+/** 59㎡·84㎡ 칸: 분양가(최고가)와 안전마진 */
+function sizeBox(it, t) {
+  const z = sizeInfo(it, t);
+  if (!z) return `<span class="st plain none"><small>${t}㎡</small><b class="mono">없음</b></span>`;
+  const unsure = it.invest.marginReliable === false && z.margin != null;
+  const price = z.lo === z.hi ? won(z.hi) : `${won(z.lo)}~${won(z.hi).replace('억', '')}억`;
+  return `<span class="st ${unsure ? 'mid' : mtone(z.margin)}"><small>${t}㎡ <span class="mono">${price.replace('~', '~')}</span></small><b class="mono">${z.margin != null ? sgn(z.margin) + (unsure ? '?' : '') : '시세 ?'}</b></span>`;
+}
 const tone = v => ({ 추천: 'good', 가능: 'good', 조건부: 'mid', 애매: 'mid', 비추천: 'bad', 불가: 'bad' }[v] || 'mid');
 function card(it) {
   const m = it.invest.margin, c = it.commute?.avg, unsure = it.invest.marginReliable === false;
   return `<a class="card" href="#item=${encodeURIComponent(it.id)}">
     <div class="row"><span class="nm">${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</span>${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</div>
-    ${it.overall.star || it.eligTag || ftag(it) || it.overBudget ? `<div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${etag(it)}${ftag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
-    <div class="stats"><span class="st ${unsure ? 'mid' : tone(it.invest.verdict)}"><small>투자 ${esc(it.invest.verdict)}${unsure ? ' · 시세 불확실' : ''}</small><b class="mono">${m != null ? sgn(m) + (unsure ? '?' : '') : '마진 ?'}</b></span><span class="st ${tone(it.commuteResult.verdict)}"><small>출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span><span class="st plain"><small>${esc(areaRange(it))}</small><b class="mono">${esc(priceRange(it))}</b></span></div>
+    ${it.overall.star || it.eligTag || it.overBudget ? `<div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${etag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
+    <div class="stats">${sizeBox(it, 59)}${sizeBox(it, 84)}<span class="st ${tone(it.commuteResult.verdict)}"><small>🚗 출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span></div>
+    ${it.hotWhy ? `<div class="hotwhy">🔥 ${esc(it.hotWhy)}</div>` : unsure ? '<div class="hotwhy muted">주변 시세가 이상하게 나와 마진은 참고만 하세요</div>' : ''}
     <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${it.closingToday ? '' : dueTag(it)}<span>${esc(nextStep(it))}</span></div>
   </a>`;
 }
@@ -157,8 +162,8 @@ function hotCard(it) {
   const b = it.buzz || {};
   const plus = k => (b[k + 'Capped'] ? '+' : '');
   return `<a class="hot" href="#item=${encodeURIComponent(it.id)}"><span class="nm">${'🔥'.repeat(it.hot)} ${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}${etag(it)}</span>
-    <span class="why">${esc(it.competition?.maxRate >= 10 ? `청약 경쟁률 최고 ${it.competition.maxRate}:1` : b.reason || '')}</span>
-    <span class="sub">블로그 ${b.blog ?? 0}${plus('blog')} · 카페 ${b.cafe ?? 0} · 영상 ${b.vclip ?? 0}${it.competition?.maxRate ? ` · 최고 ${it.competition.maxRate}:1` : ''}</span>
+    <span class="why">${esc(it.hotWhy || '')}</span>
+    <span class="sub">${[sizeInfo(it, 59) && `59㎡ ${won(sizeInfo(it, 59).hi)}`, sizeInfo(it, 84) && `84㎡ ${won(sizeInfo(it, 84).hi)}`, it.competition?.maxRate && `경쟁률 최고 ${it.competition.maxRate}:1`].filter(Boolean).join(' · ')}</span>
     <span class="pills">${vpill('투자', it.invest.verdict)}${vpill('자격', it.eligibility.status)}</span></a>`;
 }
 
@@ -166,23 +171,23 @@ function hotCard(it) {
 /** 강점·약점 한 줄씩: 판정을 한눈에 */
 function prosCons(it) {
   const pro = [], con = [];
-  const m = it.invest.margin, c = it.commute?.avg, st = it.location?.subway?.[0], f = it.funding;
+  const m = it.invest.margin, c = it.commute?.avg, st = it.location?.subway?.[0];
   if (m != null && it.invest.marginReliable !== false) (m >= 2e8 ? pro : m < 1e8 ? con : pro).push(`안전마진 ${sgn(m)}`);
   else con.push('주변 시세 불확실');
   if (c) (c <= 30 ? pro : c > 45 ? con : pro).push(`출퇴근 ${c}분`);
   if (st) (st.m <= 800 ? pro : st.m > 1500 ? con : pro).push(`${st.name} ${st.m.toLocaleString()}m`); else if (it.geo) con.push('역 2km 밖');
-  if (f) (f.s === 'good' ? pro : con).push(f.s === 'good' ? '자금 가능' : f.verdict.replace(/ \(.*\)$/, ''));
   if (it.eligibility.status === '불가') con.push(`자격 미달(${it.eligTag?.why || ''})`);
   else if (it.eligTag) con.push(it.eligTag.text + (it.eligTag.why ? `(${it.eligTag.why})` : ''));
   const br = brandOf(it); if (br) pro.push(br);
   if (it.invest.repeated) con.push(`${it.invest.repeated}차 반복 공급`);
-  if (it.hot) pro.push('🔥 화제');
+  if (it.buzzLevel) pro.push('SNS 언급 많음');
+  if (it.competition?.maxRate >= 10) pro.push(`경쟁률 최고 ${it.competition.maxRate}:1`);
   return { pro, con };
 }
 function detailView(id) {
   const it = R.items.find(i => i.id === id);
   if (!it) { location.hash = ''; return; }
-  const loc = it.location || {}, el = it.eligibility, inv = it.invest, com = it.commuteResult, f = it.funding;
+  const loc = it.location || {}, el = it.eligibility, inv = it.invest, com = it.commuteResult;
   const map = it.geo ? `https://map.kakao.com/link/map/${encodeURIComponent(it.name)},${it.geo.y},${it.geo.x}` : null;
   const nav = it.geo ? `https://map.kakao.com/link/to/${encodeURIComponent(it.name)},${it.geo.y},${it.geo.x}` : null;
   const models = (it.models || []).filter(m => m.topPrice);
@@ -195,13 +200,14 @@ function detailView(id) {
   app.innerHTML = `<div class="wrap">
     <a class="btn back" href="#">← 목록</a>
     <div><h1>${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</h1><p class="sub">${esc(it.categoryLabel)} · ${esc(it.address || it.region)}</p></div>
-    <div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${dueTag(it)}${etag(it)}${ftag(it)}<span class="tag">${esc(nextStep(it))}</span></div>
-    <div class="kpis">
-      ${kpi('분양가', best ? won(best.price) : priceRange(it) || '-', '', best ? `전용 ${best.area}㎡` : areaRange(it))}
-      ${kpi('주변 시세', best?.comp.estimate ? won(best.comp.estimate) : '-', '', best ? `${best.comp.sample}건 · 반경 ${best.comp.radius / 1000}km` : '비교 거래 부족')}
-      ${kpi('안전마진', inv.margin != null ? sgn(inv.margin) + (inv.marginReliable === false ? '?' : '') : '?', inv.marginReliable === false ? 'mid' : tone(inv.verdict), inv.marginReliable === false ? '시세 이상치 · 확인 필요' : `투자 ${inv.verdict}`)}
+    <div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${it.hot ? `<span class="pill v-star">${'🔥'.repeat(it.hot)} 핫</span>` : ''}${dueTag(it)}${etag(it)}<span class="tag">${esc(nextStep(it))}</span></div>
+    <div class="sizes">${[59, 84].map(t => { const z = sizeInfo(it, t); if (!z) return `<div class="size none"><b>${t}㎡</b><span class="sub">이 공고엔 없어요</span></div>`;
+      const unsure = inv.marginReliable === false && z.margin != null;
+      return `<div class="size ${unsure ? 'mid' : mtone(z.margin)}"><div class="h"><b>${t}㎡</b><small>전용 ${z.area}㎡</small></div>
+        <dl><div><dt>분양가</dt><dd class="mono">${z.lo === z.hi ? won(z.hi) : `${won(z.lo)}~${won(z.hi)}`}</dd></div><div><dt>주변 시세</dt><dd class="mono">${z.estimate ? won(z.estimate) : '-'}</dd></div><div class="m"><dt>안전마진</dt><dd class="mono">${z.margin != null ? sgn(z.margin) + (unsure ? '?' : '') : '시세 부족'}</dd></div></dl></div>`; }).join('')}</div>
+    ${it.hotWhy ? `<div class="hotwhy">🔥 ${esc(it.hotWhy)}</div>` : ''}
+    <div class="kpis two">
       ${kpi('출퇴근', it.commute?.avg ? `${it.commute.avg}분` : '-', tone(com.verdict), R.wp ? esc(R.wp.name) : '직장 미설정')}
-      ${kpi('잔금 현금', f ? won(f.need) : '-', f ? f.s : '', f ? esc(f.verdict.replace(/ \(.*\)$/, '')) : '우리 집 정보 필요')}
       ${kpi('자격', esc(el.status), tone(el.status === '경계' ? '애매' : el.status), it.eligTag ? esc(it.eligTag.why || it.eligTag.text) : '')}
     </div>
     <section class="panel pc"><div><h2>👍 강점</h2><ul>${pc.pro.map(x => `<li>${esc(x)}</li>`).join('') || '<li class="sub">없음</li>'}</ul></div><div><h2>👎 약점</h2><ul>${pc.con.map(x => `<li>${esc(x)}</li>`).join('') || '<li class="sub">없음</li>'}</ul></div></section>
@@ -216,8 +222,6 @@ function detailView(id) {
       <div class="vrow">${vpill('출퇴근', com.verdict)}<span>${esc(com.text)} · 30분 이내 가능, 45분 이내 애매</span></div>
       <div class="vrow"><span class="pill ${it.overall.star ? 'v-star' : 'v-' + esc(inv.verdict)}">⭐ 조건</span><span>${it.overall.star ? '자격 가능 + 투자 추천 + 출퇴근 가능을 모두 만족해요' : '자격 가능 + 투자 추천 + 출퇴근 30분 이내 중 ' + [el.status !== '가능' && '자격', inv.verdict !== '추천' && '투자', com.verdict !== '가능' && '출퇴근'].filter(Boolean).join('·') + ' 미충족'}</span></div>
     </div></section>
-
-    ${f ? `<section class="panel"><h2>💰 자금 계획 <span class="sub">추정</span></h2><div class="reasons">${reasonRows(f.lines)}</div><p class="sub" style="margin-top:6px">은행 대출은 DSR 40%·30년 원리금균등·금리(기본+스트레스) 가정, 정책대출은 기금 기준표로 계산했어요. 다른 대출이 있거나 금리가 다르면 달라져요. 실제 한도는 은행·주택도시기금 상담으로 확인하세요.</p></section>` : ''}
 
     ${it.fit ? `<section class="panel"><h2>나에게 맞는 정도 <span class="mono">${it.fit.total}점</span> <span class="sub">/ 100</span></h2><div class="bars">${it.fit.parts.map(p => `<div><b>${esc(p.k)}</b><span class="bar"><i style="width:${Math.round(p.v / p.max * 100)}%"></i></span><span class="mono">${p.v}/${p.max}</span><span class="sub">${esc(p.why)}</span></div>`).join('')}</div></section>` : ''}
 
@@ -252,7 +256,7 @@ function detailView(id) {
       ${models.map(m => `<tr><td class="mono">${esc(m.type)}</td><td class="mono">${m.pyeong ?? '-'}평</td><td class="mono">${won(m.topPrice)}</td><td class="mono">${m.general ?? '-'}</td><td class="mono">${m.special ?? '-'}</td></tr>`).join('')}
     </tbody></table></div><p class="sub" style="margin-top:6px">평형은 공급면적 ÷ 3.3058. 발코니 확장·필수 옵션은 별도예요.</p></section>` : ''}
 
-    ${it.buzz ? `<section class="panel"><h2>화제성 ${it.hot ? '🔥'.repeat(it.hot) : ''}</h2>${it.buzz.reason ? `<p><b>${esc(it.buzz.reason)}</b></p>` : ''}<p>최근 ${it.buzz.days}일 다음 검색 "${esc(it.buzz.query)}": 블로그 <b class="mono">${it.buzz.blog}${it.buzz.blogCapped ? '+' : ''}</b> · 카페 <b class="mono">${it.buzz.cafe}</b> · 영상 <b class="mono">${it.buzz.vclip}</b> · 웹문서 <b class="mono">${it.buzz.web}${it.buzz.webCapped ? '+' : ''}</b>${it.competition?.maxRate ? ` · 청약 경쟁률 최고 <b class="mono">${it.competition.maxRate}:1</b>` : ''}</p><p class="sub" style="margin-top:6px">블로그에는 분양 홍보 글이 섞여 있어서 화제성이 곧 좋은 단지라는 뜻은 아니에요. 스레드·인스타그램은 공개 검색이 안 돼서 포함하지 못했어요.</p></section>` : ''}
+    ${it.buzz ? `<section class="panel"><h2>SNS 언급</h2>${it.buzz.reason ? `<p><b>${esc(it.buzz.reason)}</b></p>` : ''}<p>최근 ${it.buzz.days}일 다음 검색 "${esc(it.buzz.query)}": 블로그 <b class="mono">${it.buzz.blog}${it.buzz.blogCapped ? '+' : ''}</b> · 카페 <b class="mono">${it.buzz.cafe}</b> · 영상 <b class="mono">${it.buzz.vclip}</b> · 웹문서 <b class="mono">${it.buzz.web}${it.buzz.webCapped ? '+' : ''}</b>${it.competition?.maxRate ? ` · 청약 경쟁률 최고 <b class="mono">${it.competition.maxRate}:1</b>` : ''}</p><p class="sub" style="margin-top:6px">블로그에는 분양 홍보 글이 섞여 있어서 화제성이 곧 좋은 단지라는 뜻은 아니에요. 스레드·인스타그램은 공개 검색이 안 돼서 포함하지 못했어요.</p></section>` : ''}
     ${it.analysisNote ? `<div class="banner info">${esc(it.analysisNote)}</div>` : ''}
     ${it.analysisError ? `<div class="banner warn">일부 분석 실패: ${esc(it.analysisError)}</div>` : ''}
     <p class="sub">투자 자문이 아닌 참고 자료예요. 자격·금액·실거주·전매 조건은 반드시 공고문 원문으로 확인하세요.</p>

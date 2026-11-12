@@ -4,7 +4,7 @@ import { collectApplyhome } from './collect/applyhome.mjs';
 import { collectLH, crossCheck } from './collect/lh.mjs';
 import { makeKakao } from './collect/kakao.mjs';
 import { comparables } from './collect/molit.mjs';
-import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL, fitScore, eligibilityTag, placeLabel, shortName, TH } from './analyze/judge.mjs';
+import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL, fitScore, eligibilityTag, placeLabel, shortName, marginHot, TH } from './analyze/judge.mjs';
 import { buzz, hotLevel } from './collect/buzz.mjs';
 import { competition, competitionStatus } from './collect/competition.mjs';
 
@@ -60,10 +60,11 @@ for (const it of items) {
       // 등록된 직장마다 출퇴근 예측 (앱에서 각자 고른 직장 기준으로 점수를 다시 계산한다)
       out.commutes = {};
       for (const wp of WORKPLACES) out.commutes[wp.id] = await kakao.commute(geo, wp);
-      // 평형별 시세 (서로 다른 전용면적 최대 3개)
-      const sizes = [...new Map((it.models || []).filter(m => m.exclusiveArea && m.topPrice)
-        .map(m => [Math.round(m.exclusiveArea), m])).values()]
-        .sort((a, b) => Math.abs(a.exclusiveArea - 84) - Math.abs(b.exclusiveArea - 84)).slice(0, 3);
+      // 평형별 시세: 59㎡·84㎡에 가장 가까운 주택형을 먼저, 남으면 하나 더 (서로 다른 전용면적 최대 3개)
+      const uniq = [...new Map((it.models || []).filter(m => m.exclusiveArea && m.topPrice)
+        .map(m => [Math.round(m.exclusiveArea), m])).values()];
+      const near = t => uniq.slice().sort((a, b) => Math.abs(a.exclusiveArea - t) - Math.abs(b.exclusiveArea - t))[0];
+      const sizes = [...new Set([near(59), near(84), ...uniq.sort((a, b) => Math.abs(a.exclusiveArea - 84) - Math.abs(b.exclusiveArea - 84))].filter(Boolean))].slice(0, 3);
       out.market = [];
       for (const m of sizes) {
         const newTown = !geo.precise || /지구|블[록럭]|BL|택지|신도시/.test(`${it.address || ''} ${it.name}`);
@@ -79,7 +80,10 @@ for (const it of items) {
   out.invest = invest(it, { models: it.models, location: out.location, market: out.market });
   try { out.buzz = await buzz(kakao, out); } catch (e) { out.buzz = null; }
   try { out.competition = await competition(KEY, it); } catch (e) { out.competition = null; }
-  out.hot = hotLevel(out.buzz, out.competition);
+  // 🔥 핫 = 주변 시세보다 얼마나 싼가(안전마진). SNS 언급은 참고용(buzzLevel)으로만 쓴다
+  const mh = marginHot(out.invest, out.market);
+  out.hot = mh.level; out.hotWhy = mh.why;
+  out.buzzLevel = hotLevel(out.buzz, out.competition);
   out.closingToday = it.window?.end === from;
   out.place = placeLabel(out);
   out.shortName = shortName(it.name);
@@ -111,7 +115,7 @@ const pushSummary = {
   closingToday: count(i => i.closingToday),
   starNames: view.filter(i => i.overall.star).map(i => i.label),
   hot: count(i => i.hot > 0),
-  hotNames: view.filter(i => i.hot > 0).sort((a, b) => b.hot - a.hot || b.buzz.score - a.buzz.score).map(i => i.label),
+  hotNames: view.filter(i => i.hot > 0).sort((a, b) => (b.invest.margin || 0) - (a.invest.margin || 0)).map(i => i.label),
   topNames: view.slice(0, 3).map(i => i.label),
   closingTodayNames: view.filter(i => i.closingToday).map(i => i.label),
   recommendNames: view.filter(i => i.invest.verdict === '추천').map(i => i.label),

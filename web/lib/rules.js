@@ -226,8 +226,8 @@ export function fitScore(it) {
     ? [st ? `역 ${st.m.toLocaleString()}m ${sv}/10` : '역 없음 0/10', `학군 ${ev + av}/10 (${el ? `초교 ${el.m}m` : '초교 없음'}·학원 ${ac}곳)`, `규모 ${uv}/3${few ? ' (잔여 물량이라 판단 안 함)' : u ? ` (공급 ${u.toLocaleString()}세대)` : ''}`, `브랜드 ${bv}/2${br ? ` (${br})` : ''}`].join(' · ')
     : '위치를 못 찾아 기본점' });
 
-  const hv = [0, 3, 5][it.hot || 0];
-  parts.push({ k: '화제성', v: hv, max: 5, why: ['보통', '🔥 핫', '🔥🔥 매우 핫'][it.hot || 0] });
+  const bz = it.buzzLevel ?? 0;
+  parts.push({ k: 'SNS 화제', v: [0, 3, 5][bz], max: 5, why: ['언급 보통', '블로그·카페 언급 많음', '언급 매우 많음'][bz] });
   return { total: parts.reduce((s, p) => s + p.v, 0), parts };
 }
 
@@ -354,4 +354,25 @@ export function affordable(h, TH) {
   };
   return { newSale: calc('private', `${y + 3}01`, false), soon: calc('noRank', null, false), soonWithJeonse: calc('noRank', null, false, h2),
     limitedByContract: (+a.financial || 0) - (+a.debt || 0) < calc('private', `${y + 3}01`, false) * 0.1 + 1e6 };
+}
+
+/** 🔥 핫 판정: 안전마진 기준. 시세 이상치는 제외. 2억 이상 🔥, 3억 이상 🔥🔥 */
+export function marginHot(inv, market) {
+  if (!inv || inv.margin == null || inv.marginReliable === false) return { level: 0, why: '' };
+  const m = inv.margin;
+  const level = m >= 3e8 ? 2 : m >= 2e8 ? 1 : 0;
+  const best = (market || []).filter(r => r.margin === m)[0];
+  const why = level ? `${best ? `${Math.round(best.area)}㎡ ` : ''}시세보다 ${won(m)} 싸요${best?.comp?.estimate ? ` (분양가가 시세의 ${Math.round(best.price / best.comp.estimate * 100)}%)` : ''}` : '';
+  return { level, why };
+}
+
+/** 59㎡·84㎡ 기준 가격·마진 (±8㎡ 안에서 가장 가까운 주택형) */
+export function sizeInfo(it, target) {
+  const row = (it.market || []).filter(r => Math.abs(r.area - target) <= 8).sort((a, b) => Math.abs(a.area - target) - Math.abs(b.area - target))[0];
+  const ms = (it.models || []).filter(m => m.topPrice && m.exclusiveArea && Math.abs(m.exclusiveArea - target) <= 8);
+  if (!row && !ms.length) return null;
+  const near = ms.length ? Math.min(...ms.map(m => Math.abs(m.exclusiveArea - target))) : null;
+  const same = ms.filter(m => Math.abs(m.exclusiveArea - target) === near);
+  const lo = same.length ? Math.min(...same.map(m => m.topPrice)) : row.price, hi = same.length ? Math.max(...same.map(m => m.topPrice)) : row.price;
+  return { area: row?.area ?? Math.round(same[0].exclusiveArea * 10) / 10, lo, hi, margin: row?.margin ?? null, estimate: row?.comp?.estimate ?? null };
 }
