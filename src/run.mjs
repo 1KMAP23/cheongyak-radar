@@ -4,7 +4,9 @@ import { collectApplyhome } from './collect/applyhome.mjs';
 import { collectLH, crossCheck } from './collect/lh.mjs';
 import { makeKakao } from './collect/kakao.mjs';
 import { comparables } from './collect/molit.mjs';
-import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL } from './analyze/judge.mjs';
+import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL, fitScore } from './analyze/judge.mjs';
+import { buzz, hotLevel } from './collect/buzz.mjs';
+import { competition, competitionStatus } from './collect/competition.mjs';
 
 function loadEnv() {
   if (!existsSync('.env')) return;
@@ -75,11 +77,17 @@ for (const it of items) {
   out.invest = invest(it, { models: it.models, location: out.location, market: out.market });
   out.commuteResult = commuteVerdict(out.commute);
   out.overall = overall(out.eligibility, out.invest, out.commuteResult);
+  try { out.buzz = await buzz(kakao, it); } catch (e) { out.buzz = null; }
+  try { out.competition = await competition(KEY, it); } catch (e) { out.competition = null; }
+  out.hot = hotLevel(out.buzz, out.competition);
+  out.closingToday = it.window?.end === from;
+  out.fit = fitScore(out);
   report.items.push(out);
 }
 
-const rank = i => (i.overall.star ? 0 : i.eligibility.status === '불가' ? 3 : i.invest.verdict === '추천' ? 1 : i.invest.verdict === '조건부' ? 1.5 : 2);
-report.items.sort((a, b) => rank(a) - rank(b) || (a.window?.end || '').localeCompare(b.window?.end || ''));
+// 정렬: ⭐ → 적합도 점수 → 마감 빠른 순 (오늘 마감 구역은 웹앱에서 맨 위로 따로 묶음)
+report.items.sort((a, b) => (b.overall.star - a.overall.star) || (b.fit.total - a.fit.total) || (a.window?.end || '').localeCompare(b.window?.end || ''));
+if (competitionStatus()) report.notices = [competitionStatus()];
 
 const count = f => report.items.filter(f).length;
 report.summary = {
@@ -90,6 +98,10 @@ report.summary = {
   notRecommend: count(i => i.invest.verdict === '비추천'),
   closingToday: count(i => i.window?.end === from),
   starNames: report.items.filter(i => i.overall.star).map(i => i.name),
+  hot: count(i => i.hot > 0),
+  hotNames: report.items.filter(i => i.hot > 0).sort((a, b) => b.hot - a.hot || b.buzz.score - a.buzz.score).map(i => i.name),
+  topNames: report.items.filter(i => i.eligibility.status !== '불가').slice(0, 3).map(i => i.name),
+  closingTodayNames: report.items.filter(i => i.closingToday && i.eligibility.status !== '불가').map(i => i.name),
   recommendNames: report.items.filter(i => i.invest.verdict === '추천').map(i => i.name),
 };
 
@@ -102,4 +114,6 @@ if (!household) for (const i of report.items) {
   console.log(`- [${i.invest.verdict}/${i.commuteResult.verdict}] ${i.name} | ${i.categoryLabel} | ${m ? `전용${m.area} 분양${(m.price / 1e8).toFixed(2)}억 시세${(m.comp.estimate / 1e8).toFixed(2)}억(${m.comp.radius}m,${m.comp.sample}건)` : (i.market?.[0]?.comp?.reason || '시세없음')} | 역 ${i.location?.subway?.[0] ? i.location.subway[0].name + ' ' + i.location.subway[0].m + 'm' : '-'} | 출퇴근 ${i.commute?.avg ?? '-'}분${i.analysisError ? ' | ERR ' + i.analysisError : ''}${i.geo ? '' : ' | 좌표없음'}`);
 }
 // 공개 로그에는 세대 정보가 들어가지 않게 개수만 출력
+console.log(`화제성: ${report.items.map(i => `${i.buzz?.query}=${Math.round(i.buzz?.score ?? 0)}`).join(', ')}`);
+console.log(`경쟁률: ${competitionStatus() || report.items.filter(i => i.competition?.field).map(i => `${i.buzz?.query} ${i.competition.field} ${i.competition.maxRate}`).join(', ') || '데이터 없음'}`);
 console.log(`완료: ${report.items.length}건 (청약홈 ${ah.length}, LH 단독 ${onlyLH.length}) / 추천 ${report.summary.recommend} · 조건부 ${report.summary.conditional} · 비추천 ${report.summary.notRecommend} / 경고 ${report.warnings.length}`);

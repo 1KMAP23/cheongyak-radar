@@ -245,3 +245,24 @@ export function overall(elig, inv, com) {
   const star = elig.status === '가능' && inv.verdict === '추천' && com.verdict === '가능';
   return { star, label: star ? '⭐ 강력 추천' : elig.status === '불가' ? '자격 불가' : inv.verdict };
 }
+
+// ── 나에게 맞는 순서: 적합도 점수 (100점) ───────────────────
+// 자격 30 + 안전마진 30 + 출퇴근 25 + 입지 10 + 화제성 5. 마감 임박은 점수가 아니라 '오늘 마감' 구역으로 따로 올린다.
+export function fitScore(it) {
+  const parts = [];
+  const e = { '가능': 30, '경계': 18, '확인 필요': 12, '불가': 0 }[it.eligibility.status] ?? 10;
+  parts.push({ k: '자격', v: e, max: 30, why: it.eligibility.status });
+  const m = it.invest.margin;
+  const mv = m == null ? 10 : Math.max(0, Math.min(30, Math.round((m / 3e8) * 30)));
+  parts.push({ k: '안전마진', v: mv, max: 30, why: m == null ? '불확실' : won(m) });
+  const c = it.commute?.avg;
+  const cv = c == null ? 5 : c <= 30 ? 25 : c <= 45 ? 15 : c <= 60 ? 6 : 0;
+  parts.push({ k: '출퇴근', v: cv, max: 25, why: c == null ? '계산 안 됨' : `${c}분` });
+  const lv = Math.max(0, Math.min(10, 5 + (it.invest.plus - it.invest.minus) * 2));
+  parts.push({ k: '입지', v: lv, max: 10, why: `가점 ${it.invest.plus} · 감점 ${it.invest.minus}` });
+  const hv = [0, 3, 5][it.hot || 0];
+  parts.push({ k: '화제성', v: hv, max: 5, why: ['보통', '핫', '매우 핫'][it.hot || 0] });
+  let total = parts.reduce((s, p) => s + p.v, 0);
+  if (it.eligibility.status === '불가') total = Math.min(total, 20); // 자격이 안 되면 다른 점수가 높아도 아래로
+  return { total, parts };
+}

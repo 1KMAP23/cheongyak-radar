@@ -8,9 +8,12 @@ webpush.setVapidDetails('mailto:noreply@example.com', process.env.VAPID_PUBLIC_K
 
 const s = JSON.parse(readFileSync('dist/summary.json', 'utf8'));
 const lines = [];
-if (s.star) lines.push(`⭐ ${s.starNames.slice(0, 2).join(', ')}`);
-else if (s.recommend) lines.push(`투자 추천: ${s.recommendNames.slice(0, 2).join(', ')}`);
-lines.push(`오늘~${s.to.slice(5).replace('-', '/')} 접수 ${s.total}건 · 추천 ${s.recommend} · 조건부 ${s.conditional}${s.closingToday ? ` · 오늘 마감 ${s.closingToday}` : ''}`);
+const short = n => n.replace(/\(.*?\)|\[.*?\]/g, '').replace(/(입주자|잔여세대|추가|공공분양주택|본청약).*$/, '').trim().slice(0, 18);
+if (s.star) lines.push(`⭐ ${s.starNames.slice(0, 2).map(short).join(', ')}`);
+if (s.closingTodayNames?.length) lines.push(`⏰ 오늘 마감: ${s.closingTodayNames.slice(0, 2).map(short).join(', ')}${s.closingTodayNames.length > 2 ? ` 외 ${s.closingTodayNames.length - 2}` : ''}`);
+if (s.topNames?.length) lines.push(`👍 나에게 맞는 순: ${s.topNames.slice(0, 2).map(short).join(', ')}`);
+if (s.hotNames?.length) lines.push(`🔥 핫: ${s.hotNames.slice(0, 2).map(short).join(', ')}`);
+lines.push(`접수 ${s.total}건 · 추천 ${s.recommend} · 조건부 ${s.conditional}`);
 if (s.warnings) lines.push(`⚠️ 수집 경고 ${s.warnings}건`);
 const payload = JSON.stringify({ title: '청약 레이더', body: lines.join('\n'), url: './' });
 
