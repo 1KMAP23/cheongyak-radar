@@ -73,7 +73,7 @@ export function makeKakao(restKey) {
   }
 
   /** 다음 월요일 08:00 출근, 18:30 퇴근 예측 (분) */
-  async function commute({ x, y }, base = new Date()) {
+  async function commute({ x, y }, dest = CHURCH, base = new Date()) {
     const kst = new Date(base.getTime() + 9 * 3600e3);
     const add = ((8 - kst.getUTCDay()) % 7) || 7; // 다음 월요일
     const mon = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate() + add));
@@ -83,8 +83,8 @@ export function makeKakao(restKey) {
       const s = j.routes?.[0]?.summary;
       return s ? { min: Math.round(s.duration / 60), km: +(s.distance / 1000).toFixed(1) } : null;
     };
-    const go = await q({ x, y }, CHURCH, '0800');
-    const back = await q(CHURCH, { x, y }, '1830');
+    const go = await q({ x, y }, dest, '0800');
+    const back = await q(dest, { x, y }, '1830');
     const avg = go && back ? Math.round((go.min + back.min) / 2) : (go || back)?.min ?? null;
     return { date: mon.toISOString().slice(0, 10), go, back, avg };
   }

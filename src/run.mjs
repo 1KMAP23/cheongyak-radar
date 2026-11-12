@@ -4,7 +4,7 @@ import { collectApplyhome } from './collect/applyhome.mjs';
 import { collectLH, crossCheck } from './collect/lh.mjs';
 import { makeKakao } from './collect/kakao.mjs';
 import { comparables } from './collect/molit.mjs';
-import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL, fitScore, eligibilityTag, placeLabel } from './analyze/judge.mjs';
+import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL, fitScore, eligibilityTag, placeLabel, shortName, TH } from './analyze/judge.mjs';
 import { buzz, hotLevel } from './collect/buzz.mjs';
 import { competition, competitionStatus } from './collect/competition.mjs';
 
@@ -19,13 +19,14 @@ loadEnv();
 
 const KEY = process.env.DATA_GO_KR_KEY, KAKAO = process.env.KAKAO_REST_KEY;
 if (!KEY || !KAKAO) { console.error('DATA_GO_KR_KEY / KAKAO_REST_KEY 필요'); process.exit(1); }
+const WORKPLACES = JSON.parse(readFileSync('config/workplaces.json', 'utf8'));
 const household = existsSync('config/household.json') ? JSON.parse(readFileSync('config/household.json', 'utf8')) : null;
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const from = kstToday();
 const to = new Date(Date.parse(from) + 9 * 864e5).toISOString().slice(0, 10);
 const kakao = makeKakao(KAKAO);
-const report = { generatedAt: new Date().toISOString(), range: { from, to }, hasHousehold: !!household, sources: {}, warnings: [], items: [] };
+const report = { generatedAt: new Date().toISOString(), range: { from, to }, sources: {}, warnings: [], items: [] };
 
 // ── 수집 ──
 let ah = [], lh = [];
@@ -56,7 +57,9 @@ for (const it of items) {
     if (geo && !geo.precise) out.analysisNote = `정확한 주소가 아니라 "${geo.query}" 기준 대략 위치로 분석했어요.`;
     if (geo) {
       out.location = await kakao.nearby(geo);
-      out.commute = await kakao.commute(geo);
+      // 등록된 직장마다 출퇴근 예측 (앱에서 각자 고른 직장 기준으로 점수를 다시 계산한다)
+      out.commutes = {};
+      for (const wp of WORKPLACES) out.commutes[wp.id] = await kakao.commute(geo, wp);
       // 평형별 시세 (서로 다른 전용면적 최대 3개)
       const sizes = [...new Map((it.models || []).filter(m => m.exclusiveArea && m.topPrice)
         .map(m => [Math.round(m.exclusiveArea), m])).values()]
@@ -73,50 +76,54 @@ for (const it of items) {
   } catch (e) {
     out.analysisError = String(e.message || e);
   }
-  out.eligibility = eligibility(it, household);
   out.invest = invest(it, { models: it.models, location: out.location, market: out.market });
-  out.commuteResult = commuteVerdict(out.commute);
-  out.overall = overall(out.eligibility, out.invest, out.commuteResult);
-  try { out.buzz = await buzz(kakao, it); } catch (e) { out.buzz = null; }
+  try { out.buzz = await buzz(kakao, out); } catch (e) { out.buzz = null; }
   try { out.competition = await competition(KEY, it); } catch (e) { out.competition = null; }
   out.hot = hotLevel(out.buzz, out.competition);
   out.closingToday = it.window?.end === from;
-  out.fit = fitScore(out);
   out.place = placeLabel(out);
-  out.eligTag = eligibilityTag(out.eligibility);
-  out.displayName = `(${out.place}) ${it.name}`;
+  out.shortName = shortName(it.name);
   report.items.push(out);
 }
 
-// 정렬: ⭐ → 적합도 점수 → 마감 빠른 순 (오늘 마감 구역은 웹앱에서 맨 위로 따로 묶음)
-report.items.sort((a, b) => (b.overall.star - a.overall.star) || (b.fit.total - a.fit.total) || (a.window?.end || '').localeCompare(b.window?.end || ''));
 if (competitionStatus()) report.notices = [competitionStatus()];
 
-const count = f => report.items.filter(f).length;
-report.summary = {
-  total: report.items.length,
+// 아침 푸시 문구는 저장소 주인 세대(HOUSEHOLD_JSON) 기준. 이 판정 결과는 보고서에 넣지 않는다
+// (비밀번호를 다른 사람과 공유하면 보고서를 열 수 있으므로, 세대 정보로 만든 내용은 각 기기에서 계산한다)
+const ownerWp = household?.prefs?.workplace || WORKPLACES[0]?.id;
+const view = report.items.map(i => {
+  const v = { ...i, commute: i.commutes?.[ownerWp] || null };
+  v.eligibility = eligibility(v, household, TH);
+  v.commuteResult = commuteVerdict(v.commute);
+  v.overall = overall(v.eligibility, v.invest, v.commuteResult);
+  v.fit = fitScore(v);
+  v.eligTag = eligibilityTag(v.eligibility);
+  v.label = `(${i.place}) ${i.shortName}${v.eligTag?.icon === '❌' ? ' ❌' : ''}`;
+  return v;
+}).sort((a, b) => (b.overall.star - a.overall.star) || (b.fit.total - a.fit.total));
+const count = f => view.filter(f).length;
+const pushSummary = {
+  total: view.length,
   star: count(i => i.overall.star),
   recommend: count(i => i.invest.verdict === '추천'),
   conditional: count(i => i.invest.verdict === '조건부'),
   notRecommend: count(i => i.invest.verdict === '비추천'),
-  closingToday: count(i => i.window?.end === from),
-  starNames: report.items.filter(i => i.overall.star).map(i => i.displayName),
+  closingToday: count(i => i.closingToday),
+  starNames: view.filter(i => i.overall.star).map(i => i.label),
   hot: count(i => i.hot > 0),
-  hotNames: report.items.filter(i => i.hot > 0).sort((a, b) => b.hot - a.hot || b.buzz.score - a.buzz.score).map(i => i.displayName),
-  topNames: report.items.slice(0, 3).map(i => i.displayName + (i.eligTag?.icon === '❌' ? ' ❌' : '')),
-  closingTodayNames: report.items.filter(i => i.closingToday).map(i => i.displayName + (i.eligTag?.icon === '❌' ? ' ❌' : '')),
-  recommendNames: report.items.filter(i => i.invest.verdict === '추천').map(i => i.name),
+  hotNames: view.filter(i => i.hot > 0).sort((a, b) => b.hot - a.hot || b.buzz.score - a.buzz.score).map(i => i.label),
+  topNames: view.slice(0, 3).map(i => i.label),
+  closingTodayNames: view.filter(i => i.closingToday).map(i => i.label),
+  recommendNames: view.filter(i => i.invest.verdict === '추천').map(i => i.label),
 };
+report.thresholds = TH;
+report.workplaces = WORKPLACES;
+report.items.sort((a, b) => (a.window?.end || '').localeCompare(b.window?.end || ''));
 
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/report.json', JSON.stringify(report));
-// 세대 정보가 없을 때만 단지별 판정을 로그로 남긴다 (공개 로그에 세대 정보가 섞이지 않게)
-if (!household) for (const i of report.items) {
-  const m = i.market?.find(x => x.margin != null);
-  if (m?.comp?.complexes) console.log(`    비교: ${m.comp.complexes.map(c => `${c.name}(${c.kind},${c.built},${c.m}m,${c.n}건,${(c.median / 1e8).toFixed(2)}억)`).join(' / ')} | lawd ${i.geo?.lawd} ${i.geo?.precise ? '' : '대략:' + i.geo?.query}`);
-  console.log(`- [${i.invest.verdict}/${i.commuteResult.verdict}] ${i.name} | ${i.categoryLabel} | ${m ? `전용${m.area} 분양${(m.price / 1e8).toFixed(2)}억 시세${(m.comp.estimate / 1e8).toFixed(2)}억(${m.comp.radius}m,${m.comp.sample}건)` : (i.market?.[0]?.comp?.reason || '시세없음')} | 역 ${i.location?.subway?.[0] ? i.location.subway[0].name + ' ' + i.location.subway[0].m + 'm' : '-'} | 출퇴근 ${i.commute?.avg ?? '-'}분${i.analysisError ? ' | ERR ' + i.analysisError : ''}${i.geo ? '' : ' | 좌표없음'}`);
-}
+writeFileSync('dist/push-summary.json', JSON.stringify({ ...pushSummary, to: report.range.to, warnings: report.warnings.length }));
 // 공개 로그에는 세대 정보가 들어가지 않게 개수만 출력
 console.log(`화제성: ${report.items.map(i => `${i.buzz?.query}=${Math.round(i.buzz?.score ?? 0)}`).join(', ')}`);
 console.log(`경쟁률: ${competitionStatus() || report.items.filter(i => i.competition?.field).map(i => `${i.buzz?.query} ${i.competition.field} ${i.competition.maxRate}`).join(', ') || '데이터 없음'}`);
-console.log(`완료: ${report.items.length}건 (청약홈 ${ah.length}, LH 단독 ${onlyLH.length}) / 추천 ${report.summary.recommend} · 조건부 ${report.summary.conditional} · 비추천 ${report.summary.notRecommend} / 경고 ${report.warnings.length}`);
+console.log(`완료: ${report.items.length}건 (청약홈 ${ah.length}, LH 단독 ${onlyLH.length}) / 추천 ${pushSummary.recommend} · 조건부 ${pushSummary.conditional} · 비추천 ${pushSummary.notRecommend} / 경고 ${report.warnings.length}`);

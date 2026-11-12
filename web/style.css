@@ -94,3 +94,16 @@ textarea{width:100%;min-height:120px;font:12px var(--mono);border-radius:10px;bo
 .etag.no{background:var(--bad-soft);color:var(--bad)}
 .etag.warn{background:var(--warn-soft);color:var(--warn)}
 .hot .why{font-size:.82rem;color:var(--ink)}
+/* 우리 집 정보 */
+.hh .panel{display:grid;gap:10px}
+.ck{display:flex;gap:10px;align-items:flex-start;font-size:.92rem;cursor:pointer}
+.ck input{width:20px;height:20px;margin:1px 0 0;flex-shrink:0;accent-color:var(--accent)}
+.ck small,.fld small{display:block;color:var(--muted);font-size:.78rem}
+.ck-row{display:flex;flex-wrap:wrap;gap:8px 16px}
+.fld{display:grid;gap:4px;font-size:.86rem}
+.fld>span:first-child{color:var(--muted)}
+.fld input,.fld select{font:inherit;font-size:1rem;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);width:100%;min-width:0}
+.unit{display:flex;align-items:center;gap:6px}
+.unit i{font-style:normal;color:var(--muted);font-size:.86rem;white-space:nowrap}
+.row-item{display:grid;gap:8px;border:1px dashed var(--line);border-radius:10px;padding:10px}
+button.link{background:none;border:0;color:var(--bad);padding:0;justify-self:start;font-size:.84rem}

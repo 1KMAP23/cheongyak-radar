@@ -1,11 +1,41 @@
 // 청약 레이더 웹앱: 잠금 해제 → 목록 → 단지별 분석 페이지 → 공고문 원문 링크
+// 자격·점수는 이 기기에 저장된 '우리 집 정보'로 계산한다 (서버 데이터에는 세대 정보가 없다)
+import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore } from './lib/rules.js';
+import { householdView } from './household.js';
 const VAPID_PUBLIC = 'BDGbFHT5-WKQMTzp1Y_tj_5ByKKSqmjqoVrW-P67Yf2_EUMiaAS6Xabst53usz-kz1tCr6UA8OA_vk-gl47xPCA';
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }, del: k => { try { localStorage.removeItem(k); } catch {} } };
-const won = n => n == null ? '-' : Math.abs(n) >= 1e8 ? `${(n / 1e8).toFixed(2).replace(/\.?0+$/, '')}억` : `${Math.round(n / 1e4).toLocaleString()}만`;
 const md = s => s ? s.slice(5).replace('-', '/') : '';
-let R = null, filter = store.get('cy-filter') || 'all';
+let RAW = null, R = null, filter = store.get('cy-filter') || 'all';
+const loadHH = () => { try { return JSON.parse(store.get('cy-household') || 'null'); } catch { return null; } };
+
+/** 서버 데이터 + 이 기기의 우리 집 정보 → 화면용 데이터 */
+function enrich(raw) {
+  const HH = loadHH();
+  const wps = raw.workplaces || [];
+  const wp = HH ? wps.find(w => w.id === HH.prefs?.workplace) || null : wps[0] || null;
+  const regions = HH?.prefs?.regions?.length ? HH.prefs.regions : null;
+  const items = [];
+  let hidden = 0;
+  for (const src of raw.items) {
+    if (regions && !regions.some(r => (src.region || '').startsWith(r))) { hidden++; continue; }
+    const it = { ...src };
+    it.commute = wp ? src.commutes?.[wp.id] || null : null;
+    it.eligibility = eligibility(it, HH, raw.thresholds);
+    it.commuteResult = wp ? commuteVerdict(it.commute, wp.name) : { verdict: '확인 필요', text: '설정에서 직장을 고르면 출퇴근 시간을 계산해요' };
+    it.overall = overall(it.eligibility, it.invest, it.commuteResult);
+    it.fit = fitScore(it);
+    it.eligTag = eligibilityTag(it.eligibility);
+    const minPrice = Math.min(...(it.models || []).map(m => m.topPrice).filter(Boolean));
+    it.overBudget = HH?.prefs?.maxPrice && isFinite(minPrice) && minPrice > HH.prefs.maxPrice;
+    items.push(it);
+  }
+  items.sort((a, b) => (b.overall.star - a.overall.star) || (b.fit.total - a.fit.total) || (a.window?.end || '').localeCompare(b.window?.end || ''));
+  const count = f => items.filter(f).length;
+  return { ...raw, items, HH, wp, hidden,
+    summary: { total: items.length, star: count(i => i.overall.star), recommend: count(i => i.invest.verdict === '추천'), conditional: count(i => i.invest.verdict === '조건부'), notRecommend: count(i => i.invest.verdict === '비추천'), hot: count(i => i.hot > 0) } };
+}
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
@@ -32,7 +62,7 @@ function lockView(msg = '') {
     ev.preventDefault();
     const p = document.getElementById('pass').value.trim();
     document.getElementById('err').textContent = '여는 중…';
-    try { R = await decrypt(p); store.set('cy-pass', p); route(); }
+    try { RAW = await decrypt(p); R = enrich(RAW); store.set('cy-pass', p); route(); }
     catch (e) { document.getElementById('err').textContent = e.message === 'nodata' ? '아직 오늘 데이터가 없어요. 잠시 후 다시 열어 주세요.' : '비밀번호가 맞지 않아요.'; }
   });
 }
@@ -40,7 +70,7 @@ function lockView(msg = '') {
 async function boot() {
   const p = store.get('cy-pass');
   if (!p) return lockView();
-  try { R = await decrypt(p); route(); }
+  try { RAW = await decrypt(p); R = enrich(RAW); route(); }
   catch (e) { if (e.message === 'nodata') app.innerHTML = '<div class="wrap"><p class="sub">오늘 데이터가 아직 없어요. 잠시 후 다시 열어 주세요.</p></div>'; else { store.del('cy-pass'); lockView('비밀번호가 바뀌었어요. 다시 넣어 주세요.'); } }
 }
 
@@ -81,10 +111,11 @@ function listView() {
   const hot = R.items.filter(i => i.hot > 0).sort((a, b) => b.hot - a.hot || (b.buzz?.score || 0) - (a.buzz?.score || 0)).slice(0, 6);
   const warn = R.warnings.length ? `<div class="banner warn">⚠️ ${R.warnings.map(esc).join('<br>')}</div>` : '';
   const only = R.crossCheck?.onlyLH?.length ? `<div class="banner info">청약홈에 없고 LH에만 올라온 공고 ${R.crossCheck.onlyLH.length}건도 포함했어요.</div>` : '';
-  const noHh = R.hasHousehold ? '' : '<div class="banner info">세대 정보가 아직 없어서 자격은 \'확인 필요\'로 표시돼요.</div>';
+  const noHh = R.HH ? (R.hidden ? `<p class="sub">관심 지역 밖 공고 ${R.hidden}건은 숨겼어요. <a href="#household">설정</a></p>` : '')
+    : '<a class="banner info" href="#household" style="display:block;text-decoration:none;color:inherit"><b>우리 집 정보를 입력해 주세요 →</b><br><span class="sub">입력하면 자격(❌·⚠️)과 출퇴근까지 이 기기에서 판정해요. 지금은 자격을 \'확인 필요\'로 보여줘요.</span></a>';
   app.innerHTML = `<div class="wrap">
     <div class="top"><div><h1>청약 레이더</h1><p class="sub">${md(R.range.from)}~${md(R.range.to)} 접수 · ${new Date(R.generatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 분석</p></div>
-      <a class="btn" href="#settings" aria-label="설정">⚙︎</a></div>
+      <span style="display:flex;gap:6px"><a class="btn" href="#household" aria-label="우리 집 정보">🏠</a><a class="btn" href="#settings" aria-label="설정">⚙︎</a></span></div>
     ${warn}${noHh}
     <div class="chips"><span class="chip">전체 <b class="mono">${s.total}</b></span><span class="chip">⭐ <b class="mono">${s.star}</b></span><span class="chip">추천 <b class="mono">${s.recommend}</b></span><span class="chip">조건부 <b class="mono">${s.conditional}</b></span><span class="chip">비추천 <b class="mono">${s.notRecommend}</b></span><span class="chip">🔥 <b class="mono">${s.hot ?? 0}</b></span></div>
     <div class="chips" role="group" aria-label="필터">
@@ -103,9 +134,9 @@ const etag = it => it.eligTag ? ` <span class="etag ${it.eligTag.icon === '❌' 
 function card(it) {
   const off = false; // 자격 미달도 순위는 그대로 두고 태그로만 표시
   return `<a class="card${off ? ' off' : ''}" href="#item=${encodeURIComponent(it.id)}">
-    <div class="row"><span class="nm">${it.hot ? `<span class="fire" title="화제성">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.name)}${etag(it)}</span><span class="fitbox">${due(it)}${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</span></div>
-    <div class="pills">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${vpill('자격', it.eligibility.status)}${vpill('투자', it.invest.verdict)}${vpill('출퇴근', it.commuteResult.verdict)}</div>
-    <div class="meta"><span>${esc(it.region)}</span><span class="tag">${esc(it.categoryLabel)}</span>${it.onlyLH ? '<span class="tag">LH 단독</span>' : ''}<span>${esc(schedule(it))}</span></div>
+    <div class="row"><span class="nm">${it.hot ? `<span class="fire" title="화제성">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}${etag(it)}${it.overBudget ? ' <span class="etag warn">💸 예산 초과</span>' : ''}</span><span class="fitbox">${due(it)}${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</span></div>
+    <div class="pills">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${it.eligTag || it.eligibility.status === '확인 필요' ? '' : vpill('자격', it.eligibility.status)}${vpill('투자', it.invest.verdict)}${vpill('출퇴근', it.commuteResult.verdict)}</div>
+    <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${it.onlyLH ? '<span class="tag">LH 단독</span>' : ''}<span>${esc(schedule(it))}</span></div>
     <div class="meta mono">${esc([areaRange(it), priceRange(it), it.invest.margin != null ? `안전마진 ${it.invest.margin >= 0 ? '+' : ''}${won(it.invest.margin)}` : '', it.commute?.avg ? `출퇴근 ${it.commute.avg}분` : ''].filter(Boolean).join(' · '))}</div>
   </a>`;
 }
@@ -113,7 +144,7 @@ function card(it) {
 function hotCard(it) {
   const b = it.buzz || {};
   const plus = k => (b[k + 'Capped'] ? '+' : '');
-  return `<a class="hot" href="#item=${encodeURIComponent(it.id)}"><span class="nm">${'🔥'.repeat(it.hot)} ${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.name)}${etag(it)}</span>
+  return `<a class="hot" href="#item=${encodeURIComponent(it.id)}"><span class="nm">${'🔥'.repeat(it.hot)} ${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}${etag(it)}</span>
     <span class="why">${esc(it.competition?.maxRate >= 10 ? `청약 경쟁률 최고 ${it.competition.maxRate}:1` : b.reason || '')}</span>
     <span class="sub">블로그 ${b.blog ?? 0}${plus('blog')} · 카페 ${b.cafe ?? 0} · 영상 ${b.vclip ?? 0}${it.competition?.maxRate ? ` · 최고 ${it.competition.maxRate}:1` : ''}</span>
     <span class="pills">${vpill('투자', it.invest.verdict)}${vpill('자격', it.eligibility.status)}</span></a>`;
@@ -191,6 +222,7 @@ function settingsView() {
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   app.innerHTML = `<div class="wrap">
     <a class="btn back" href="#">← 목록</a><h1>설정</h1>
+    <a class="panel" href="#household" style="display:block;text-decoration:none;color:inherit"><h2>🏠 우리 집 정보 →</h2><p class="sub">${R.HH ? '입력됨 · 고치기' : '아직 입력 전'}</p></a>
     <section class="panel"><h2>매일 아침 알림</h2>
       ${standalone ? `<p class="sub">아래 버튼을 누르고 알림을 허용한 뒤, 나오는 코드를 복사해서 Claude에게 보내거나 GitHub 비밀값 <b>PUSH_SUBSCRIPTIONS</b>에 넣어 주세요.</p>
         <p style="margin-top:10px"><button class="primary" id="sub">알림 켜기</button></p><div class="err" id="perr"></div>
@@ -199,7 +231,7 @@ function settingsView() {
     </section>
     <section class="panel"><h2>이 기기</h2><p class="sub">저장된 비밀번호를 지우면 다음에 다시 물어봐요.</p><p style="margin-top:10px"><button id="forget">비밀번호 지우기</button></p></section>
   </div>`;
-  document.getElementById('forget').onclick = () => { store.del('cy-pass'); R = null; location.hash = ''; lockView(); };
+  document.getElementById('forget').onclick = () => { store.del('cy-pass'); R = RAW = null; location.hash = ''; lockView(); };
   const btn = document.getElementById('sub');
   if (btn) btn.onclick = async () => {
     const err = document.getElementById('perr');
@@ -222,6 +254,8 @@ function route() {
   const h = location.hash.slice(1);
   if (h.startsWith('item=')) detailView(decodeURIComponent(h.slice(5)));
   else if (h === 'settings') settingsView();
+  else if (h === 'household') householdView({ app, esc, workplaces: RAW.workplaces || [], current: loadHH(),
+    onSave: hh => { if (hh) store.set('cy-household', JSON.stringify(hh)); else store.del('cy-household'); R = enrich(RAW); location.hash = ''; route(); } });
   else listView();
 }
 window.addEventListener('hashchange', route);

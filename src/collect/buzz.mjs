@@ -44,7 +44,7 @@ export async function buzz(kakao, it) {
   }
   // 카페(맘카페·부동산 카페)와 영상은 광고 블로그보다 실제 관심에 가까워서 가중치를 준다
   res.score = Math.round(res.blog + res.cafe * 3 + res.vclip * 2 + res.web * 0.5);
-  res.reason = hotReason(res, titles);
+  res.reason = hotReason(res, titles, it);
   return res;
 }
 
@@ -61,15 +61,19 @@ const TOPICS = [
   ['로또·시세차익', /로또|시세\s*차익|안전\s*마진|차익/],
   ['분양가 저렴', /분양가.{0,6}(저렴|착한|낮|싸)|저렴한\s*분양가/],
   ['줍줍·무순위', /줍줍|무순위|계약\s*취소/],
-  ['경쟁률 높음', /경쟁률|대\s*1|:\s*1|마감/],
+  ['경쟁률 높음', /경쟁률\s*[0-9.]+|[0-9.]+\s*(대|:)\s*1(?![0-9])|완판|조기\s*마감|1순위\s*마감/],
   ['역세권·교통', /역세권|GTX|초역세권|지하철|도보\s*\d+분/],
   ['학군', /학군|학원가|초품아|초등학교/],
   ['대단지·브랜드', /대단지|브랜드|1군/],
   ['미분양·할인', /미분양|할인|선착순|잔여\s*세대|특가/],
   ['견본주택 방문', /견본\s*주택|모델\s*하우스|방문\s*후기|임장/],
 ];
-function hotReason(r, texts) {
-  const hits = TOPICS.map(([label, re]) => [label, texts.filter(t => re.test(t)).length]).filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 2);
+function hotReason(r, texts, it = {}) {
+  // 공고 종류 자체를 말하는 주제는 이유가 못 된다 (무순위 공고에 '줍줍' 얘기가 많은 건 당연)
+  const own = new Set();
+  if (['noRank', 'arbitrary'].includes(it.category)) { own.add('줍줍·무순위'); own.add('미분양·할인'); }
+  if (/잔여|선착순/.test(it.name || '')) own.add('미분양·할인');
+  const hits = TOPICS.filter(([label]) => !own.has(label)).map(([label, re]) => [label, texts.filter(t => re.test(t)).length]).filter(([, n]) => n >= Math.max(2, texts.length * 0.1)).sort((a, b) => b[1] - a[1]).slice(0, 2);
   const src = [r.cafe >= 3 && `카페 ${r.cafe}건`, r.vclip >= 3 && `영상 ${r.vclip}건`, `블로그 ${r.blog}${r.blogCapped ? '+' : ''}건`].filter(Boolean).slice(0, 2).join('·');
   if (!hits.length) return `최근 2주 ${src} 언급`;
   return `‘${hits.map(h => h[0]).join('’·‘')}’ 얘기가 많아요 (최근 2주 ${src})`;
