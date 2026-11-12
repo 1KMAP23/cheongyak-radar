@@ -5,3 +5,7 @@ const r = JSON.parse(readFileSync('dist/report.json', 'utf8'));
 writeFileSync('dist/summary.json', JSON.stringify({ ...r.summary, to: r.range.to, warnings: r.warnings.length }));
 cpSync('web', 'dist/site', { recursive: true });
 writeFileSync('dist/site/version.txt', r.generatedAt);
+// 아이폰이 옛 CSS·JS를 캐시로 계속 쓰지 않게 배포마다 버전을 붙인다
+const v = Date.now().toString(36);
+const idx = 'dist/site/index.html';
+writeFileSync(idx, readFileSync(idx, 'utf8').replace('href="style.css"', `href="style.css?v=${v}"`).replace('src="app.js"', `src="app.js?v=${v}"`));
