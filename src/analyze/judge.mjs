@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 
 const TH = JSON.parse(readFileSync(new URL('../../config/thresholds.json', import.meta.url)));
-const won = n => (n == null ? '-' : n >= 1e8 ? `${(n / 1e8).toFixed(n % 1e8 ? 2 : 0).replace(/\.?0+$/, '')}억` : `${Math.round(n / 1e4).toLocaleString()}만`);
+const won = n => (n == null ? '-' : n === 0 ? '0원' : n >= 1e8 ? `${(n / 1e8).toFixed(n % 1e8 ? 2 : 0).replace(/\.?0+$/, '')}억` : `${Math.round(n / 1e4).toLocaleString()}만`);
 export { won };
 
 function thresholds(year) {
@@ -42,6 +42,78 @@ function carValueAt(cars = [], date) {
 function childrenAt(h, date) {
   // 출산 예정 자녀는 예정월이 공고일보다 앞서면 태어난 것으로 본다 (실제 출생 후 birth를 고쳐 넣기)
   return (h.children || []).filter(c => c.birth && `${c.birth}-01` <= date).length;
+}
+
+const yearsBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / (365.2425 * 864e5);
+const addYears = (d, n) => `${+d.slice(0, 4) + n}${d.slice(4)}`;
+
+/** 민영 일반공급 가점 (84점 만점): 무주택기간 32 + 부양가족 35 + 통장 가입기간 17 */
+export function gajeom(h, date) {
+  const ap = h.applicantInfo || {};
+  // 무주택기간: 만 30세부터, 30세 전에 혼인했으면 혼인신고일부터
+  let noHome = null;
+  if (ap.birth) {
+    const at30 = addYears(ap.birth, 30);
+    const start = h.marriageDate && h.marriageDate < at30 ? h.marriageDate : at30;
+    const s = [start, h.noHomeSince].filter(Boolean).sort().at(-1);
+    if (s <= date) { const y = yearsBetween(s, date); noHome = y < 1 ? 2 : Math.min(32, 2 * Math.floor(y) + 2); } else noHome = 0;
+  }
+  // 부양가족: 배우자 + 자녀(태아 포함) + 3년 이상 같은 등본의 직계존속. 본인 제외
+  const deps = (h.marriageDate && h.marriageDate <= date ? 1 : 0) + (h.children || []).length + (h.parentsDependents || 0);
+  const family = Math.min(35, 5 + deps * 5);
+  // 통장 가입기간
+  const acc = h.accounts?.applicant;
+  let bank = null;
+  if (acc?.openedAt) { const y = yearsBetween(acc.openedAt, date); bank = y < 0.5 ? 1 : y < 1 ? 2 : Math.min(17, Math.floor(y) + 2); }
+  return { noHome, family, deps, bank, total: noHome != null && bank != null ? noHome + family + bank : null };
+}
+
+function applicantChecks(it, h, date, cat, T, kids) {
+  const out = [], push = (k, v, s) => out.push({ k, v, s });
+  const pub = ['publicSale', 'equityShare', 'newlywedHopeTown'].includes(cat);
+
+  // 소득: 가장 엄격한 특공 기준이 도시근로자 월평균소득 100% 수준. 그보다 낮으면 모든 특공 소득 기준 통과
+  const inc = Object.values(h.monthlyIncome || {}).reduce((s, v) => s + (v || 0), 0);
+  const size = Math.max(1, (h.marriageDate ? 2 : 1) + (h.children || []).filter(c => `${c.birth}-01` <= date && !c.expected).length);
+  const base = T.urbanIncome100?.[Math.min(size, 5)];
+  if (inc && base) {
+    const pct = Math.round((inc / base) * 100);
+    push('소득', `세대 월평균 ${won(inc)} = ${size}인 가구 도시근로자 소득의 ${pct}%${h.dualIncome ? ' (맞벌이)' : ' (외벌이)'} → ${pct <= 100 ? '가장 엄격한 특공 기준(100%)보다 낮아 신혼·생애최초·신생아 특공 소득 기준 모두 통과' : pct <= 130 ? '일부 특공은 소득 초과 가능, 공고문 표 확인' : '공공 특공 대부분 소득 초과, 민영은 추첨분만 가능'}`, pct <= 100 ? 'good' : pct <= 130 ? 'mid' : 'bad');
+  } else push('소득', '세대 월평균 소득 미입력', 'mid');
+
+  // 지역 우선순위: 신청자 기준
+  const res = h.residence || {};
+  if (res.sido && res.since) {
+    const yrs = yearsBetween(res.since, date);
+    const same = it.region && res.sido.startsWith(it.region);
+    if (same) push('거주 지역', `${res.sido} ${Math.floor(yrs)}년 거주 → ${yrs >= 2 ? '해당지역 1순위 우선 (2년 이상)' : '해당지역이지만 2년 미만 → 규제지역은 기타지역 취급'}`, yrs >= 2 ? 'good' : 'mid');
+    else push('거주 지역', `${res.sido} 거주 → ${it.region} 공고는 ${it.flags?.largeSite ? '대규모 택지: 수도권 기타지역 물량(통상 50%)으로 청약 가능' : '수도권 거주자로 청약 가능하지만 해당지역 거주자가 먼저 당첨'}`, 'mid');
+  }
+
+  // 청약통장
+  const acc = h.accounts?.applicant;
+  if (acc && (acc.paidCount || acc.recognizedAmount)) {
+    const amt = acc.recognizedAmount || 0;
+    if (pub) push('청약통장', `${acc.bank || ''} 납입 ${acc.paidCount ?? '?'}회 · 인정금액 ${won(amt)} → 국민주택 1순위(24회) ${acc.paidCount >= 24 ? '충족' : '확인 필요'}, 생애최초 저축액 600만 ${amt >= 6e6 ? '충족' : '미달'}`, acc.paidCount >= 24 && amt >= 6e6 ? 'good' : 'mid');
+    else push('청약통장', `예치금 ${won(amt)} → 서울 기준 85㎡ 이하 300만·102㎡ 이하 600만·모든 면적 1500만 / ${amt >= 6e6 ? '102㎡ 이하까지 1순위 가능' : amt >= 3e6 ? '85㎡ 이하 가능' : '예치금 부족'}`, amt >= 3e6 ? 'good' : 'bad');
+  } else push('청약통장', '신청자(아내) 통장 정보 미입력', 'mid');
+
+  // 특별공급 유형별 자격 요약
+  const types = [];
+  const married7 = h.marriageDate && yearsBetween(h.marriageDate, date) <= 7;
+  if (married7) types.push(`신혼부부(혼인 ${yearsBetween(h.marriageDate, date).toFixed(1)}년, 7년 이내 ~${addYears(h.marriageDate, 7).slice(0, 7)})`);
+  const pregnantOrNewborn = (h.children || []).some(c => c.expected || (c.birth && yearsBetween(`${c.birth}-01`, date) <= 2));
+  if (pregnantOrNewborn) types.push('신생아(임신 중·2세 이하 자녀, 임신진단서 필요)');
+  const firstLife = h.neverOwned && (h.incomeTaxYears?.applicant || 0) >= 5 && (married7 || kids || h.marriageDate) && h.householdHeadSince && h.householdHeadSince <= date;
+  if (firstLife) types.push('생애최초(평생 무주택·소득세 5년·세대주)');
+  if (types.length) push('특공 가능 유형', types.join(' / '), 'good');
+
+  if (cat === 'private') {
+    const g = gajeom(h, date);
+    if (g.total != null) push('민영 가점', `무주택 ${g.noHome} + 부양가족 ${g.family}(${g.deps}명, 태아 포함) + 통장 ${g.bank} = ${g.total}점 / 84점`, g.total >= 50 ? 'good' : 'mid');
+    else push('민영 가점', `무주택 ${g.noHome ?? '?'} + 부양가족 ${g.family}(${g.deps}명) + 통장 ${g.bank ?? '가입일 미입력'} → 일반공급은 추첨제 비중이 큰 85㎡ 초과·비규제 물량이 유리`, 'mid');
+  }
+  return out;
 }
 
 export function eligibility(it, h) {
@@ -84,7 +156,7 @@ export function eligibility(it, h) {
   }
   if (cat === 'noRank') push('자격', '무순위: 해당 지역(또는 전국) 무주택 세대구성원, 통장 불필요', 'good');
   if (cat === 'arbitrary') push('자격', '임의공급: 만 19세 이상 누구나, 통장 불필요. 당첨 시 주택 소유로 간주', 'good');
-  push('소득·청약통장', '공고문 표 기준 (세대 소득·아내 통장 정보 입력 후 자동 판정)', 'mid');
+  if (!['noRank', 'arbitrary'].includes(cat)) for (const c of applicantChecks(it, h, date, cat, T, kids)) checks.push(c);
 
   const status = checks.some(c => c.s === 'bad') ? (cat === 'publicSale' ? '경계' : '불가') : checks.some(c => c.s === 'mid' && /자동차|총자산/.test(c.k)) ? '경계' : '가능';
   // 공공분양은 60㎡ 초과 일반공급으로 우회 가능하므로 '불가' 대신 '경계'

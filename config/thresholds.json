@@ -6,14 +6,23 @@
       "realEstate": 215500000,
       "car": 45420000,
       "birthRelief": {
-        "1": { "realEstate": 237050000, "car": 49960000 },
-        "2": { "realEstate": 258600000, "car": 54510000 }
+        "1": {
+          "realEstate": 237050000,
+          "car": 49960000
+        },
+        "2": {
+          "realEstate": 258600000,
+          "car": 54510000
+        }
       },
       "source": "https://www.lh.or.kr/menu.es?mid=a10402010100"
     },
     "newlywedHopeTown": {
       "totalAssetNet": 362000000,
-      "birthRelief": { "1": 397000000, "2": 431000000 },
+      "birthRelief": {
+        "1": 397000000,
+        "2": 431000000
+      },
       "counts": "부동산+금융+자동차+임차보증금-부채",
       "source": "https://www.lh.or.kr/menu.es?mid=a10402010200"
     },
@@ -24,6 +33,14 @@
     },
     "equityShare": {
       "note": "지분적립형은 공고문마다 총자산 기준을 따로 적음. 공고문 값 필수, 없으면 '확인 필요'."
+    },
+    "urbanIncome100": {
+      "1": 3813363,
+      "2": 5866270,
+      "3": 8168429,
+      "4": 8802202,
+      "5": 9326985,
+      "source": "https://www.healin2me.com/p/housing-income-calculator.html (LH청약플러스 2026 기준)"
     }
   }
 }
