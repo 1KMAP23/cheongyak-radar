@@ -41,6 +41,69 @@
       "4": 8802202,
       "5": 9326985,
       "source": "https://www.healin2me.com/p/housing-income-calculator.html (LH청약플러스 2026 기준)"
+    },
+    "loan": {
+      "_source": "10.15 대책(2025) + 2026 가계부채 관리방안. 추정용이며 실제 한도는 은행 심사로 정해진다",
+      "ltv": {
+        "regulated": 0.4,
+        "nonRegulated": 0.7,
+        "firstHome": 0.7
+      },
+      "capByPrice": [
+        [
+          1500000000,
+          600000000
+        ],
+        [
+          2500000000,
+          400000000
+        ],
+        [
+          1000000000000000.0,
+          200000000
+        ]
+      ],
+      "dsr": 0.4,
+      "rate": 0.042,
+      "stress": 0.015,
+      "years": 30,
+      "regulatedAreas": [
+        "서울",
+        "과천",
+        "광명",
+        "성남시 분당",
+        "성남시 수정",
+        "성남시 중원",
+        "수원시 영통",
+        "수원시 장안",
+        "수원시 팔달",
+        "안양시 동안",
+        "용인시 수지",
+        "의왕",
+        "하남"
+      ],
+      "policy": [
+        {
+          "name": "신생아 특례 디딤돌",
+          "maxPrice": 900000000,
+          "maxArea": 85,
+          "cap": 400000000,
+          "ltv": 0.7,
+          "babyWithinYears": 2,
+          "maxIncomeYear": 200000000,
+          "maxNetAsset": 488000000,
+          "note": "대출 신청일 기준 2년 안에 출산한 무주택 세대주. DSR 대신 DTI 60%"
+        },
+        {
+          "name": "보금자리론(생애최초)",
+          "maxPrice": 600000000,
+          "cap": 420000000,
+          "ltv": 0.7,
+          "firstHomeOnly": true,
+          "maxIncomeYear": 70000000,
+          "note": "부부 합산 연소득 7천만 이하. DSR 미적용"
+        }
+      ]
     }
   }
 }

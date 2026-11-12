@@ -66,7 +66,8 @@ export function householdView({ app, esc, workplaces, current, onSave }) {
     <section class="panel"><h2>5. 자산</h2>
       ${money('re', '부동산 (토지·건물)', h.assets?.realEstate, '집이 없으면 0')}
       ${money('jeonse', '전세·월세 보증금', h.assets?.jeonseDeposit, '신혼희망타운 총자산에 들어가요')}
-      ${money('fin', '예금·적금·주식·ETF', h.assets?.financial)}
+      ${fld('jeonse-end', '전세 계약 만기일', v(h.assets?.jeonseEnd), 'date')}
+      ${money('fin', '예금·적금·주식·ETF', h.assets?.financial, '계약금·잔금에 바로 쓸 수 있는 돈 (차값 낼 돈은 빼고)')}
       ${money('debt', '대출 (부채)', h.assets?.debt)}
       <h2 style="margin-top:12px">자동차</h2>
       <div id="cars">${cars.map(carRow).join('')}</div>
@@ -137,7 +138,7 @@ export function householdView({ app, esc, workplaces, current, onSave }) {
       residence: { sido: $('sido').value, since: date('since') },
       monthlyIncome: { applicant: incA, partner: incP },
       dualIncome: incA > 0 && incP > 0,
-      assets: { realEstate: won('re') || 0, jeonseDeposit: won('jeonse') || 0, financial: won('fin') || 0, debt: won('debt') || 0, cars: carsOut },
+      assets: { realEstate: won('re') || 0, jeonseDeposit: won('jeonse') || 0, jeonseEnd: date('jeonse-end'), financial: won('fin') || 0, debt: won('debt') || 0, cars: carsOut },
       accounts: { applicant: { bank: $('bank').value.trim(), openedAt: date('opened'), paidCount: num('paid'), recognizedAmount: won('amt') } },
       prefs: { workplace: $('wp').value || null, regions: ['서울', '경기', '인천'].filter(r => $(`rg-${r}`).checked), maxPrice: won('maxp') },
     };

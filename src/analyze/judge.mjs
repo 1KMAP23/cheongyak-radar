@@ -1,6 +1,6 @@
 // 서버 쪽 판정: 세대 정보와 상관없는 것(분류·투자·지역 표시). 자격·점수 규칙은 web/lib/rules.js (앱과 공용)
 import { readFileSync } from 'node:fs';
-import { won, CATEGORY_LABEL } from '../../web/lib/rules.js';
+import { won, CATEGORY_LABEL, brandOf, isRegulated, pickThresholds } from '../../web/lib/rules.js';
 export * from '../../web/lib/rules.js';
 export const TH = JSON.parse(readFileSync(new URL('../../config/thresholds.json', import.meta.url)));
 
@@ -39,7 +39,7 @@ export function invest(it, { models, location, market }) {
   } else {
     const m = best.margin;
     verdict = m >= 2e8 ? '추천' : m >= 1e8 ? '조건부' : '비추천';
-    add('안전마진', `전용 ${best.area}㎡ 분양가 ${won(best.price)} + 취득세 ${won(best.tax)} vs 주변 시세 ${won(best.comp.estimate)} (반경 ${best.comp.radius / 1000}km·${best.comp.sample}건) → ${m >= 0 ? '+' : ''}${won(m)}`,
+    add('안전마진', `전용 ${best.area}㎡ 분양가 ${won(best.price)} + 취득세 ${won(best.tax)} vs 주변 시세 ${won(best.comp.estimate)} (반경 ${best.comp.radius / 1000}km·${best.comp.sample}건) → ${m >= 0 ? '+' : ''}${won(m)} · 시세 대비 분양가 ${Math.round(best.price / best.comp.estimate * 100)}%`,
       m >= 2e8 ? 'good' : m >= 1e8 ? 'mid' : 'bad');
     if (best.comp.status === '표본 적음') add('시세 신뢰도', `비교 거래 ${best.comp.sample}건으로 적음`, 'mid');
     // 이상치 방어: 시세가 분양가의 1.6배를 넘으면 비교 단지가 잘못 잡혔을 가능성이 커서 추천을 막는다
@@ -65,9 +65,14 @@ export function invest(it, { models, location, market }) {
     if (location.academies1km >= 15) { plus++; add('학원가', '1km 안 학원 15곳 이상', 'good'); }
   }
 
+  // totalUnits는 이번 공고의 공급 세대수(조합원분 제외)라 단지 전체보다 작게 나올 수 있다 → 소단지 감점은 하지 않고 표시만
   const units = it.totalUnits;
-  if (units >= 1000) { plus++; add('규모', `${units.toLocaleString()}세대 대단지`, 'good'); }
-  else if (units && units < 300 && !['noRank', 'arbitrary'].includes(category(it))) { minus++; add('규모', `${units}세대 소단지`, 'bad'); }
+  const few = ['noRank', 'arbitrary'].includes(category(it));
+  if (!few && units >= 1000) { plus++; add('규모', `이번 공급만 ${units.toLocaleString()}세대 (대단지)`, 'good'); }
+  else if (!few && units && units < 300) add('규모', `이번 공급 ${units}세대 · 재건축·재개발이면 조합원분 포함 전체 세대수는 공고문 확인`, 'mid');
+  const br = brandOf(it);
+  if (br) { plus++; add('브랜드', `${br} (시공능력 상위 10개사)`, 'good'); }
+  else if (it.builder) add('브랜드', `${it.builder} · 상위 10개사 아님 → 수요가 약한 지역에서 미분양 위험이 더 커요`, 'mid');
 
   const round = +(it.name.match(/\((\d+)차\)/)?.[1] || 0);
   if (['noRank', 'arbitrary'].includes(category(it))) {
@@ -75,8 +80,16 @@ export function invest(it, { models, location, market }) {
     else add('공급 사유', '계약취소분이면 최초 분양가라 기회, 미계약 잔여면 미분양 신호 (공고문 확인)', 'mid');
   }
 
+  // 투자 관점: 팔 수 있는 시점과 전세를 놓을 수 있는지가 수익을 가른다
   const f = it.flags || {};
-  if (f.priceCap) add('규제', `분양가상한제${f.publicLand ? '·공공택지' : ''} → 실거주 의무·전매제한 기간 공고문 확인`, 'mid');
+  const reg = isRegulated(it, pickThresholds(TH, (it.noticeDate || '2026').slice(0, 4))?.loan);
+  if (!few) {
+    const resale = reg || f.publicLand ? '3년' : '6개월~1년(과밀억제권역 1년)';
+    const reside = f.priceCap ? (f.publicLand ? '거주의무 가능성 큼 (공공택지 분양가상한제, 최장 5년)' : '거주의무 가능성 (민간택지 분양가상한제 2~3년)') : '거주의무 없을 가능성 큼';
+    add('전매·거주', `전매제한 약 ${resale} · ${reside} → 정확한 기간은 공고문 확인`, f.priceCap ? 'mid' : 'good');
+    if (f.priceCap) add('투자 유의', '거주의무가 있으면 입주 때 전세를 놓아 잔금을 치르는 방식이 막혀요. 잔금 전액을 대출·현금으로 준비해야 해요', 'mid');
+  } else add('전매·거주', '무순위·잔여 물량은 최초 공고 조건(전매·거주의무)을 그대로 따라요. 공고문 확인', 'mid');
+  if (reg) add('규제지역', '서울 전역·경기 12곳(10.15 대책): 대출 LTV 40%(생애최초 70%)·최대 6억, 세대주만 1순위, 재당첨 제한 10년', 'mid');
   if (f.speculativeZone) add('규제', '투기과열지구 → 재당첨 제한 10년·대출 규제', 'bad');
   if (category(it) === 'equityShare') { add('구조', '지분적립형: 차익은 보유 지분만큼만, 전매 10년', 'bad'); if (verdict === '추천') verdict = '조건부'; }
   if (category(it) === 'newlywedHopeTown') add('구조', '분양가가 총자산 기준 초과 시 수익공유형 모기지 의무 → 차익 일부 공유', 'mid');

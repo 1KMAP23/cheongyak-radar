@@ -155,6 +155,9 @@ export function eligibility(it, h, TH) {
   // 무순위·임의공급: 당첨되면 유주택자가 된다 → 생애최초·신혼 특공 기회가 사라진다
   if (cat === 'noRank' || cat === 'arbitrary') {
     push('자격', cat === 'noRank' ? '무순위: 무주택 세대구성원, 통장 불필요' : '임의공급: 만 19세 이상 누구나, 통장 불필요', 'good');
+    // 무순위는 지자체가 거주지를 제한할 수 있다 (예: 서울 공고는 서울 거주자만)
+    const sido = h.residence?.sido;
+    if (cat === 'noRank' && sido && it.region && !sido.startsWith(it.region)) push('거주지 제한', `${sido} 거주 → ${it.region} 무순위는 해당 지역 거주자로 제한되는 경우가 많아요. 공고문 '신청자격' 확인`, 'mid');
     const sp = specialTypes(h, date).out;
     push('당첨 시 주의', `당첨되면 유주택자가 돼요${sp.length ? ` → ${sp.join('·')} 특공 기회가 사라져요` : ''}. 줍줍 당첨은 재당첨 제한도 걸릴 수 있어요`, sp.length ? 'bad' : 'mid');
   } else for (const c of applicantChecks(it, h, date, cat, T)) checks.push(c);
@@ -162,7 +165,7 @@ export function eligibility(it, h, TH) {
   const hardBad = checks.filter(c => c.s === 'bad' && c.k !== '당첨 시 주의');
   let status;
   if (hardBad.length) status = cat === 'publicSale' && hardBad.every(c => /부동산|자동차/.test(c.k)) ? '경계' : '불가'; // 공공분양 자산 초과는 60㎡ 초과 일반공급으로 가능
-  else if (checks.some(c => c.s === 'mid' && /자동차|총자산|세대주/.test(c.k)) || checks.some(c => c.k === '당첨 시 주의' && c.s === 'bad')) status = '경계';
+  else if (checks.some(c => c.s === 'mid' && /자동차|총자산|세대주|거주지 제한/.test(c.k)) || checks.some(c => c.k === '당첨 시 주의' && c.s === 'bad')) status = '경계';
   else status = '가능';
   return { cat, status, checks, totalAsset: total, kids };
 }
@@ -172,7 +175,7 @@ export function eligibilityTag(e) {
   if (e.status === '불가') return { icon: '❌', text: '자격 미달', why: [...new Set(e.checks.filter(c => c.s === 'bad').map(c => c.k))].join('·') };
   if (e.status !== '경계') return null;
   if (e.checks.some(c => c.k === '당첨 시 주의' && c.s === 'bad')) return { icon: '⚠️', text: '당첨 시 특공 기회 사라짐', why: '' };
-  const why = [...new Set(e.checks.filter(c => c.s === 'bad' || (c.s === 'mid' && /자동차|총자산|세대주|부동산/.test(c.k))).map(c => c.k === '세대주' ? '생애최초 불가' : c.k))].join('·');
+  const why = [...new Set(e.checks.filter(c => c.s === 'bad' || (c.s === 'mid' && /자동차|총자산|세대주|부동산|거주지 제한/.test(c.k))).map(c => c.k === '세대주' ? '생애최초 불가' : c.k))].join('·');
   return { icon: '⚠️', text: '자격 일부 제한', why };
 }
 
@@ -189,7 +192,7 @@ export function overall(elig, inv, com) {
 }
 
 // ── 나에게 맞는 순서: 적합도 점수 (100점) ───────────────────
-// 안전마진 40 + 출퇴근 30 + 입지 25(지하철 10·학군 10·규모 5) + 화제성 5. 자격은 점수에 넣지 않고 태그로 표시한다.
+// 안전마진 40 + 출퇴근 30 + 입지 25(지하철 10·학군 10·규모 3·브랜드 2) + 화제성 5. 자격은 점수에 넣지 않고 태그로 표시한다.
 export function fitScore(it) {
   const parts = [];
   const inv = it.invest, m = inv.margin;
@@ -213,11 +216,14 @@ export function fitScore(it) {
   const el = loc.elementary?.[0], ac = loc.academies1km ?? 0;
   const ev = !el ? 0 : el.m <= 300 ? 5 : el.m <= 500 ? 4 : el.m <= 800 ? 2 : 1;
   const av = ac >= 100 ? 5 : ac >= 50 ? 4 : ac >= 25 ? 3 : ac >= 10 ? 2 : ac >= 3 ? 1 : 0;
-  const u = it.totalUnits;
-  const uv = u == null ? 2 : u >= 1000 ? 5 : u >= 500 ? 3 : u >= 300 ? 2 : 0;
-  const lv = it.geo ? sv + ev + av + uv : 5;
+  // totalUnits는 '이번 공고 공급 세대수'라 단지 전체 규모가 아니다. 무순위·임의공급(몇 세대)은 규모를 판단하지 않는다
+  const u = it.totalUnits, few = ['noRank', 'arbitrary'].includes(it.category);
+  const uv = few || u == null ? 1 : u >= 1000 ? 3 : u >= 500 ? 2 : u >= 300 ? 1 : 0;
+  const br = brandOf(it);
+  const bv = br ? 2 : 0;
+  const lv = it.geo ? sv + ev + av + uv + bv : 5;
   parts.push({ k: '입지', v: lv, max: 25, why: it.geo
-    ? [st ? `역 ${st.m.toLocaleString()}m ${sv}/10` : '역 없음 0/10', `학군 ${ev + av}/10 (${el ? `초교 ${el.m}m` : '초교 없음'}·학원 ${ac}곳)`, `규모 ${uv}/5${u ? ` (${u.toLocaleString()}세대)` : ''}`].join(' · ')
+    ? [st ? `역 ${st.m.toLocaleString()}m ${sv}/10` : '역 없음 0/10', `학군 ${ev + av}/10 (${el ? `초교 ${el.m}m` : '초교 없음'}·학원 ${ac}곳)`, `규모 ${uv}/3${few ? ' (잔여 물량이라 판단 안 함)' : u ? ` (공급 ${u.toLocaleString()}세대)` : ''}`, `브랜드 ${bv}/2${br ? ` (${br})` : ''}`].join(' · ')
     : '위치를 못 찾아 기본점' });
 
   const hv = [0, 3, 5][it.hot || 0];
@@ -233,4 +239,119 @@ export function estimateCommute(geo, wp) {
   const s = Math.sin(dLat / 2) ** 2 + Math.cos(toR(geo.y)) * Math.cos(toR(wp.y)) * Math.sin(dLng / 2) ** 2;
   const km = 2 * R * Math.asin(Math.sqrt(s)) * 1.35;
   return { avg: Math.round((km / 28) * 60 + 5), km: +km.toFixed(1), estimated: true };
+}
+
+// ── 브랜드: 시공능력평가 상위 10개사 (전문가들이 미분양 위험을 가르는 기준으로 자주 꼽음) ──
+const BRANDS = [
+  ['삼성물산', /삼성물산|래미안/], ['현대건설', /현대건설|힐스테이트|디에이치/], ['대우건설', /대우건설|푸르지오|써밋/],
+  ['현대엔지니어링', /현대엔지니어링/], ['DL이앤씨', /DL이앤씨|디엘이앤씨|e편한세상|이편한세상|아크로/], ['GS건설', /GS건설|지에스건설|자이/],
+  ['포스코이앤씨', /포스코|더샵|오티에르/], ['롯데건설', /롯데건설|롯데캐슬|르엘/], ['SK에코플랜트', /SK에코|에스케이에코|SK뷰/], ['HDC현대산업개발', /HDC|현대산업개발|아이파크/],
+];
+export function brandOf(it) {
+  const t = `${it.builder || ''} ${it.name || ''}`;
+  return BRANDS.find(([, re]) => re.test(t))?.[0] || null;
+}
+
+/** 10.15 대책 규제지역(서울 전역·경기 12곳): LTV 40%, 세대주만 1순위, 재당첨 10년 */
+export function isRegulated(it, L) {
+  if (it.flags?.speculativeZone || it.flags?.adjustArea) return true;
+  const a = `${it.address || ''} ${it.region || ''}`;
+  return (L?.regulatedAreas || []).some(r => r === '서울' ? /^서울|서울특별시/.test(a.trim()) || it.region === '서울' : r.split(' ').every(w => a.includes(w.replace(/시$/, ''))));
+}
+
+function taxOf(p, firstHome) {
+  const rate = p <= 6e8 ? 0.011 : p <= 9e8 ? (p / 1e8 * 2 / 3 - 3) / 100 + 0.001 : 0.033;
+  const t = p * rate;
+  return Math.max(0, firstHome && p <= 12e8 ? t - 2e6 : t);
+}
+
+/** 자금 계획: 계약금·잔금을 실제로 낼 수 있는지 (추정) */
+export function funding(it, h, TH) {
+  if (!h) return null;
+  const date = it.noticeDate || it.window?.start || new Date().toISOString().slice(0, 10);
+  const L = pickThresholds(TH, date.slice(0, 4))?.loan;
+  const want = h.prefs?.areas?.length ? h.prefs.areas : [84];
+  const ms = (it.models || []).filter(m => m.topPrice && m.exclusiveArea);
+  if (!L || !ms.length) return null;
+  const pick = ms.slice().sort((a, b) => Math.min(...want.map(w => Math.abs(a.exclusiveArea - w))) - Math.min(...want.map(w => Math.abs(b.exclusiveArea - w))) || a.topPrice - b.topPrice)[0];
+  const price = pick.topPrice;
+  const reg = isRegulated(it, L);
+  const first = !!h.neverOwned && h.homeless !== false;
+  const ltv = first ? L.ltv.firstHome : reg ? L.ltv.regulated : L.ltv.nonRegulated;
+  const cap = L.capByPrice.find(([upTo]) => price <= upTo)[1];
+  const inc = Object.values(h.monthlyIncome || {}).reduce((s, v) => s + (+v || 0), 0);
+  const r = (L.rate + L.stress) / 12, n = L.years * 12;
+  const dsrLoan = inc ? Math.round(inc * L.dsr * (1 - (1 + r) ** -n) / r) : null;
+  const bankLoan = Math.min(price * ltv, cap, dsrLoan ?? Infinity);
+  const a = h.assets || {};
+  // 정책대출(DSR 미적용): 잔금 시점 기준으로 조건을 본다
+  const soon = ['noRank', 'arbitrary'].includes(it.category) || (it.moveIn && Date.parse(`${it.moveIn.slice(0, 4)}-${it.moveIn.slice(4, 6) || '01'}-01`) - Date.parse(date) < 180 * 864e5);
+  const payDate = soon ? new Date(Date.parse(date) + 60 * 864e5).toISOString().slice(0, 10) : it.moveIn ? `${it.moveIn.slice(0, 4)}-${it.moveIn.slice(4, 6) || '01'}-01` : date;
+  const netAsset = (+a.realEstate || 0) + (+a.jeonseDeposit || 0) + (+a.financial || 0) - (+a.debt || 0);
+  const policyTried = [];
+  let policy = null;
+  for (const p of L.policy || []) {
+    const why = [];
+    if (price > p.maxPrice) why.push(`집값 ${won(p.maxPrice)} 초과`);
+    if (p.maxArea && pick.exclusiveArea > p.maxArea + 0.5) why.push(`전용 ${p.maxArea}㎡ 초과`);
+    if (p.maxIncomeYear && inc * 12 > p.maxIncomeYear) why.push(`연소득 ${won(p.maxIncomeYear)} 초과`);
+    if (p.maxNetAsset && netAsset > p.maxNetAsset) why.push(`순자산 ${won(p.maxNetAsset)} 초과`);
+    if (p.firstHomeOnly && !first) why.push('생애최초 아님');
+    if (p.babyWithinYears) {
+      const ok = (h.children || []).some(c => c.birth && bd(c.birth) <= payDate && yearsBetween(bd(c.birth), payDate) <= p.babyWithinYears);
+      if (!ok) why.push(`잔금 때(${payDate.slice(0, 7)}) ${p.babyWithinYears}년 안에 태어난 아이 없음`);
+    }
+    const amt = Math.min(p.cap, price * p.ltv);
+    policyTried.push({ name: p.name, ok: !why.length, amt, why });
+    if (!why.length && (!policy || amt > policy.amt)) policy = { name: p.name, amt };
+  }
+  const loan = Math.max(bankLoan, policy?.amt || 0);
+  const tax = Math.round(taxOf(price, first));
+  const now = Math.max(0, (+a.financial || 0) - (+a.debt || 0));
+  const later = now + (+a.jeonseDeposit || 0);
+  const need = Math.max(0, Math.round(price + tax - loan));
+  const contract = Math.round(price * 0.1);
+  // 무순위·임의공급은 보통 계약 후 1~2달 안에 잔금. 새 분양은 입주(2~3년 뒤)에 잔금이라 전세보증금을 쓸 수 있다
+  const jeonseFree = !soon || (a.jeonseEnd && a.jeonseEnd <= payDate);
+  const pool = jeonseFree ? later : now;
+  let s, verdict;
+  if (contract > now) { s = 'bad'; verdict = `계약금 ${won(contract)}부터 부족 (현금 ${won(now)})`; }
+  else if (need <= pool) { s = 'good'; verdict = `잔금 가능 · 남는 돈 ${won(pool - need)}`; }
+  else if (!jeonseFree && need <= later) { s = 'mid'; verdict = `전세보증금을 잔금 전에 돌려받아야 가능 (부족 ${won(need - now)})`; }
+  else { s = 'bad'; verdict = `잔금 ${won(need - pool)} 부족`; }
+  const lim = [
+    `LTV ${Math.round(ltv * 100)}%${first ? '(생애최초)' : reg ? '(규제지역)' : ''} ${won(price * ltv)}`,
+    `가격별 한도 ${won(cap)}`,
+    dsrLoan != null ? `소득 기준(DSR 40%, 금리 ${((L.rate + L.stress) * 100).toFixed(1)}% 가정) ${won(dsrLoan)}` : '소득 미입력이라 소득 한도 계산 안 함',
+  ];
+  return {
+    s, verdict, price, tax, loan, bankLoan, policy, need, now, later, soon, reg, area: Math.round(pick.exclusiveArea),
+    lines: [
+      { k: '기준 주택형', v: `전용 ${Math.round(pick.exclusiveArea)}㎡ 최고가 ${won(price)} + 취득세 약 ${won(tax)}${first ? '(생애최초 감면 반영)' : ''}`, s: 'mid' },
+      { k: '은행 대출', v: `${won(bankLoan)} = ${lim.join(' · ')} 중 가장 작은 값`, s: policy && policy.amt > bankLoan ? 'mid' : 'good' },
+      { k: '정책 대출', v: policyTried.map(p => p.ok ? `${p.name} 가능 ${won(p.amt)}` : `${p.name} 불가(${p.why.join(', ')})`).join(' / ') + (policy && policy.amt > bankLoan ? ` → ${policy.name}이 더 커서 이걸로 계산` : ''), s: policy ? 'good' : 'mid' },
+      { k: '계약금', v: `분양가 10% ${won(contract)} · 지금 현금 ${won(now)}`, s: contract <= now ? 'good' : 'bad' },
+      { k: '잔금 현금', v: `${won(need)} 필요 · ${jeonseFree ? `${soon ? '전세 만기가 잔금 전이라' : '입주 때'} 현금+전세보증금 ${won(later)} 기준` : `잔금(${payDate.slice(0, 7)})이 전세 만기 전이라 지금 현금 ${won(now)} 기준`}`, s },
+      ...(reg ? [{ k: '규제지역', v: '주담대는 6개월 안에 전입해야 해요. 실거주 안 하고 전세를 놓으면 대출을 못 받아 잔금을 전세금으로 치러야 해요', s: 'mid' }] : []),
+    ],
+  };
+}
+
+/** 우리 집이 감당할 수 있는 최고 분양가 (84㎡ 기준, 규제지역 아님 가정). 새 분양(입주 2~3년 뒤)과 줍줍(잔금 곧) 두 가지 */
+export function affordable(h, TH) {
+  if (!h) return null;
+  const y = new Date().getFullYear();
+  const a = h.assets || {};
+  const h2 = { ...h, assets: { ...a, financial: (+a.financial || 0) + (+a.jeonseDeposit || 0), jeonseDeposit: 0 } };
+  const calc = (cat, moveIn, regulated, hh = h) => {
+    let lo = 1e8, hi = 30e8;
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2;
+      const f = funding({ category: cat, moveIn, region: regulated ? '서울' : '경기', address: regulated ? '서울' : '경기도', models: [{ exclusiveArea: 84, topPrice: mid }], noticeDate: new Date().toISOString().slice(0, 10) }, hh, TH);
+      if (f && f.s === 'good') lo = mid; else hi = mid;
+    }
+    return Math.floor(lo / 1e6) * 1e6;
+  };
+  return { newSale: calc('private', `${y + 3}01`, false), soon: calc('noRank', null, false), soonWithJeonse: calc('noRank', null, false, h2),
+    limitedByContract: (+a.financial || 0) - (+a.debt || 0) < calc('private', `${y + 3}01`, false) * 0.1 + 1e6 };
 }
