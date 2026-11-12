@@ -16,7 +16,7 @@ export function searchTerms(it) {
   const block = words.find(w => BLOCK.test(w))?.replace(/(블[록럭]|BL)$/i, '') || null;
   const core = words.filter(w => !BLOCK.test(w) && !GENERIC.test(w) && !/^\d+$/.test(w) && !/입주자|모집|공고|매각/.test(w));
   // 브랜드는 보통 이름 뒤쪽에 있다 ("평택 고덕 국제신도시 A-55 대광로제비앙 모아엘가")
-  const key = core.length > 3 ? core.slice(-2) : core;
+  const key = core.length > 3 ? core.slice(-3) : core;
   return { query: [...key, block].filter(Boolean).join(' '), must: [...key.map(norm), block && norm(block)].filter(Boolean) };
 }
 
@@ -48,6 +48,6 @@ export async function buzz(kakao, it) {
 export function hotLevel(b, comp) {
   const rate = comp?.maxRate ?? 0;
   if ((b?.score ?? 0) >= 150 || rate >= 50) return 2;
-  if ((b?.score ?? 0) >= 60 || rate >= 10) return 1;
+  if ((b?.score ?? 0) >= 90 || rate >= 10) return 1;
   return 0;
 }
