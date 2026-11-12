@@ -1,0 +1,23 @@
+name: reach-test
+on:
+  push:
+    paths: ['.github/workflows/reach-test.yml']
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 해외(GitHub) 서버에서 각 API 접속 가능 여부
+        run: |
+          echo "runner IP: $(curl -s https://api.ipify.org)"
+          for u in \
+            "https://api.odcloud.kr/api/ApplyhomeInfoDetailSvc/v1/getAPTLttotPblancDetail?page=1&perPage=1" \
+            "https://apis.data.go.kr/B552555/lhLeaseNoticeInfo1/lhLeaseNoticeInfo1?PG_SZ=1&PAGE=1" \
+            "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev?LAWD_CD=41117&DEAL_YMD=202610" \
+            "https://apply.lh.or.kr/" \
+            "https://www.applyhome.co.kr/" \
+            "https://dapi.kakao.com/v2/local/search/keyword.json?query=test" \
+            "https://apis-navi.kakaomobility.com/v1/directions" ; do
+            code=$(curl -s -o /tmp/b -m 20 -w "%{http_code}" "$u" || echo FAIL)
+            echo "== $code $u"; head -c 200 /tmp/b; echo
+          done
