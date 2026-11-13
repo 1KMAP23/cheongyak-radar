@@ -108,6 +108,8 @@ export function invest(it, { models, location, market }) {
   if (verdict === '추천' && minus > plus) verdict = '조건부';
   if (verdict === '조건부' && best && best.margin < 1.5e8 && minus >= 2) verdict = '비추천';
   if (unreliable && verdict === '조건부' && best.margin >= 2e8) add('판정', '마진은 크게 나왔지만 비교 단지가 맞지 않을 수 있어 조건부로 낮췄어요', 'mid');
+  // 시세를 믿을 수 없으면 마진으로 비추천하지 않는다 (마이너스로 나와도 판단 보류 = 조건부)
+  if (unreliable && verdict === '비추천' && best?.margin != null && best.margin < 1e8) { verdict = '조건부'; add('판정', '주변 시세를 믿기 어려워 비추천 대신 판단 보류(조건부)로 뒀어요. 공고문 분양가와 인근 신축 시세를 직접 비교해 보세요', 'mid'); }
   return { verdict, margin: best?.margin ?? null, marginReliable: !unreliable, repeated: ['noRank', 'arbitrary'].includes(category(it)) && round >= 3 ? round : 0, notes, plus, minus };
 }
 
