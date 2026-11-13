@@ -106,9 +106,8 @@ const areaRange = it => { const a = (it.models || []).map(m => Math.round(m.excl
 const FILTERS = [
   ['all', '전체', () => true],
   ['today', '⏰ 오늘 마감', it => it.closingToday],
-  ['new', '📢 새 공고', it => isNew(it)],
+  ['new', '🆕 NEW', it => it.isNew],
   ['soon', '📅 접수 예정', it => it.window?.start > R.today],
-  ['apt', '🏠 아파트만', it => !NON_APT.has(it.category) && !it.mixedUse],
   ['ok', '자격 됨', it => it.eligibility.status !== '불가'],
   ['near', '🚗 45분 이내', it => it.commuteResult.verdict === '가능' || it.commuteResult.verdict === '애매'],
   ['rec', '투자 추천', it => it.invest.verdict === '추천'],
@@ -152,7 +151,7 @@ const dueTag = it => it.closingToday ? '<span class="etag no">⏰ 오늘 마감<
   : it.window?.end ? `<span class="tag mono">마감 D-${dday(it.window.end)}</span>` : '';
 /** 일반 아파트가 아니면 표시: 오피스텔·도시형생활주택·생활숙박시설·주상복합 추정 */
 const kindTag = it => NON_APT.has(it.category) ? `<span class="etag warn">${({ officetel: '🏢', urban: '🏘', lodging: '🏨' })[it.category]} ${esc(it.categoryLabel)} · 아파트 아님</span>` : it.mixedUse ? '<span class="etag warn">🏢 주상복합 추정</span>' : '';
-const isNew = it => it.noticeDate && dday(it.noticeDate) >= -7;
+const isNew = it => !!it.isNew; // 지난 업데이트 이후 새로 생긴 공고 (서버에서 비교)
 const sgn = m => (m >= 0 ? '+' : '') + won(m);
 const mtone = m => (m == null ? 'plain' : m >= 2e8 ? 'good' : m >= 1e8 ? 'mid' : 'bad');
 /** 59㎡·84㎡ 칸: 분양가(최고가)와 안전마진 */

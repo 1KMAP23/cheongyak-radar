@@ -77,6 +77,26 @@ for (const it of items) {
   if (/주상복합/.test(`${it.name} ${it.address || ''}`)) it.mixedUse = '공고명에 주상복합';
   else if (twin) it.mixedUse = `같은 단지에서 오피스텔도 분양 (${twin.name})`;
 }
+// 오피스텔·생활숙박시설·주상복합(추정)은 목록에서 뺀다. 누락 확인용으로 이름은 로그와 보고서에 남김
+const excluded = items.filter(i => i.propertyType === '오피스텔' || i.propertyType === '생활숙박시설' || i.mixedUse);
+for (const x of excluded) items.splice(items.indexOf(x), 1);
+console.log(`제외(오피스텔·생숙·주상복합): ${excluded.length}건${excluded.length ? ` (${excluded.map(x => `${x.name}[${x.propertyType || '주상복합'}]`).join(', ')})` : ''}`);
+
+// ── 지난 업데이트 데이터 (배포된 암호화 파일) → 새로 생긴 공고 찾기 ──
+async function previousIds() {
+  const url = process.env.SITE_URL || 'https://1kmap23.github.io/cheongyak-radar/';
+  try {
+    const e = await (await fetch(`${url}data.enc.json?t=${Date.now()}`)).json();
+    const b = x => Buffer.from(x, 'base64');
+    const { webcrypto } = await import('node:crypto');
+    const base = await webcrypto.subtle.importKey('raw', new TextEncoder().encode(process.env.APP_PASSPHRASE || ''), 'PBKDF2', false, ['deriveKey']);
+    const k = await webcrypto.subtle.deriveKey({ name: 'PBKDF2', salt: b(e.salt), iterations: e.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const prev = JSON.parse(new TextDecoder().decode(await webcrypto.subtle.decrypt({ name: 'AES-GCM', iv: b(e.iv) }, k, b(e.ct))));
+    return { at: prev.generatedAt, ids: new Set(prev.items.map(i => i.id)) };
+  } catch (err) { console.log(`지난 데이터 읽기 실패 → NEW 표시 안 함: ${err.message}`); return null; }
+}
+const PREV = await previousIds();
+report.previousAt = PREV?.at || null;
 
 // ── 분석 ──
 for (const it of items) {
@@ -136,6 +156,7 @@ for (const it of items) {
   out.hot = mh.level; out.hotWhy = mh.why;
   out.buzzLevel = hotLevel(out.buzz, out.competition);
   out.closingToday = it.window?.end === from;
+  out.isNew = PREV ? !PREV.ids.has(it.id) : false; // 지난 업데이트 이후 새로 생긴 공고
   out.place = placeLabel(out);
   out.shortName = shortName(it.name);
   report.items.push(out);
@@ -148,6 +169,7 @@ if (failed.length >= 3) report.warnings.push(`분석 오류 ${failed.length}건:
 // 시세 검산 로그 (공공데이터로 만든 값만, 세대 정보 없음)
 for (const i of report.items.filter(i => i.propertyType || i.mixedUse)) console.log(`유형 ${i.shortName}: ${i.propertyType || '주상복합 추정'} ${i.mixedUse || ''}`);
 for (const i of report.items.filter(i => i.market?.length)) console.log(`시세 ${i.place}|${i.shortName}|🔥${i.hot}|${i.invest.verdict} ` + i.market.map(m => `${Math.round(m.area)}㎡ ${(m.price / 1e8).toFixed(2)}→${m.comp.estimate ? (m.comp.estimate / 1e8).toFixed(2) : '-'} 마진${m.margin != null ? (m.margin / 1e8).toFixed(2) : '-'}${m.reliable ? '' : '?'} n${m.comp.sample ?? 0} ${m.comp.method || ''}`).join(' / '));
+console.log(`NEW: ${report.items.filter(i => i.isNew).map(i => i.shortName).join(', ') || '없음'} (지난 업데이트 ${report.previousAt || '-'})`);
 console.log(`분석 오류: ${failed.length}건${failed.length ? ` (${failed[0].analysisError})` : ''}`);
 
 // 아침 푸시 문구는 저장소 주인 세대(HOUSEHOLD_JSON) 기준. 이 판정 결과는 보고서에 넣지 않는다
