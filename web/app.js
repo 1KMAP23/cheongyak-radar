@@ -1,6 +1,6 @@
 // 청약 레이더 웹앱: 잠금 해제 → 목록 → 단지별 분석 페이지 → 공고문 원문 링크
 // 자격·점수는 이 기기에 저장된 '우리 집 정보'로 계산한다 (서버 데이터에는 세대 정보가 없다)
-import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo, normWeights } from './lib/rules.js';
+import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo, normWeights, NON_APT } from './lib/rules.js';
 import { householdView } from './household.js';
 const VAPID_PUBLIC = 'BDGbFHT5-WKQMTzp1Y_tj_5ByKKSqmjqoVrW-P67Yf2_EUMiaAS6Xabst53usz-kz1tCr6UA8OA_vk-gl47xPCA';
 const app = document.getElementById('app');
@@ -108,6 +108,7 @@ const FILTERS = [
   ['today', '⏰ 오늘 마감', it => it.closingToday],
   ['new', '📢 새 공고', it => isNew(it)],
   ['soon', '📅 접수 예정', it => it.window?.start > R.today],
+  ['apt', '🏠 아파트만', it => !NON_APT.has(it.category) && !it.mixedUse],
   ['ok', '자격 됨', it => it.eligibility.status !== '불가'],
   ['near', '🚗 45분 이내', it => it.commuteResult.verdict === '가능' || it.commuteResult.verdict === '애매'],
   ['rec', '투자 추천', it => it.invest.verdict === '추천'],
@@ -149,6 +150,8 @@ const dday = d => Math.round((Date.parse(d) - Date.parse(R.today)) / 864e5);
 const dueTag = it => it.closingToday ? '<span class="etag no">⏰ 오늘 마감</span>'
   : it.window?.start > R.today ? `<span class="tag mono">접수 D-${dday(it.window.start)}</span>`
   : it.window?.end ? `<span class="tag mono">마감 D-${dday(it.window.end)}</span>` : '';
+/** 일반 아파트가 아니면 표시: 오피스텔·도시형생활주택·생활숙박시설·주상복합 추정 */
+const kindTag = it => NON_APT.has(it.category) ? `<span class="etag warn">${({ officetel: '🏢', urban: '🏘', lodging: '🏨' })[it.category]} ${esc(it.categoryLabel)} · 아파트 아님</span>` : it.mixedUse ? '<span class="etag warn">🏢 주상복합 추정</span>' : '';
 const isNew = it => it.noticeDate && dday(it.noticeDate) >= -7;
 const sgn = m => (m >= 0 ? '+' : '') + won(m);
 const mtone = m => (m == null ? 'plain' : m >= 2e8 ? 'good' : m >= 1e8 ? 'mid' : 'bad');
@@ -165,7 +168,7 @@ function card(it) {
   const m = it.invest.margin, c = it.commute?.avg, unsure = it.invest.marginReliable === false;
   return `<a class="card" href="#item=${encodeURIComponent(it.id)}">
     <div class="row"><span class="rk mono${it.rank <= 3 ? ' top' : ''}">${it.rank}</span><span class="nm">${isNew(it) ? '<span class="newb">NEW</span> ' : ''}${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</span>${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</div>
-    ${it.overall.star || it.eligTag || it.overBudget ? `<div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${etag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
+    ${it.overall.star || it.eligTag || it.overBudget || kindTag(it) ? `<div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${kindTag(it)}${etag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
     <div class="stats">${sizeBox(it, 59)}${sizeBox(it, 84)}<span class="st ${tone(it.commuteResult.verdict)}"><small>🚗 출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span></div>
     ${it.hotWhy ? `<div class="hotwhy">🔥 ${esc(it.hotWhy)}</div>` : unsure ? '<div class="hotwhy muted">주변 시세가 이상하게 나와 마진은 참고만 하세요</div>' : ''}
     <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${dueTag(it)}<span>${esc(nextStep(it))}</span></div>
@@ -194,6 +197,8 @@ function prosCons(it) {
   else if (it.eligTag) con.push(it.eligTag.text + (it.eligTag.why ? `(${it.eligTag.why})` : ''));
   const br = brandOf(it); if (br) pro.push(br);
   if (it.invest.repeated) con.push(`${it.invest.repeated}차 반복 공급`);
+  if (NON_APT.has(it.category)) con.push(`${it.categoryLabel} (아파트 아님 · 시세 비교 불가)`);
+  else if (it.mixedUse) con.push('주상복합 추정 (관리비·환금성 확인)');
   if (it.buzzLevel) pro.push('SNS 언급 많음');
   if (it.competition?.maxRate >= 10) pro.push(`경쟁률 최고 ${it.competition.maxRate}:1`);
   return { pro, con };
@@ -214,7 +219,7 @@ function detailView(id) {
   app.innerHTML = `<div class="wrap">
     <a class="btn back" href="#">← 목록</a>
     <div><h1>${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</h1><p class="sub">${esc(it.categoryLabel)} · ${esc(it.address || it.region)}</p></div>
-    <div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${it.hot ? `<span class="pill v-star">${'🔥'.repeat(it.hot)} 핫</span>` : ''}${dueTag(it)}${etag(it)}<span class="tag">${esc(nextStep(it))}</span></div>
+    <div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${it.hot ? `<span class="pill v-star">${'🔥'.repeat(it.hot)} 핫</span>` : ''}${kindTag(it)}${dueTag(it)}${etag(it)}<span class="tag">${esc(nextStep(it))}</span></div>
     <div class="sizes">${[59, 84].map(t => { const z = sizeInfo(it, t); if (!z) return `<div class="size none"><b>${t}㎡</b><span class="sub">이 공고엔 없어요</span></div>`;
       const unsure = z.reliable === false && z.margin != null;
       return `<div class="size ${unsure ? 'mid' : mtone(z.margin)}"><div class="h"><b>${t}㎡</b><small>전용 ${z.area}㎡</small></div>
@@ -257,6 +262,7 @@ function detailView(id) {
 
     <section class="panel"><h2>기본 정보</h2><dl class="facts">
       <div><dt>공급 유형</dt><dd>${esc(it.categoryLabel)}${it.detailType ? ` (${esc(it.detailType)})` : ''}</dd></div>
+      <div><dt>건물 유형</dt><dd>${NON_APT.has(it.category) ? `${esc(it.categoryLabel)} (아파트 아님)` : it.mixedUse ? `주상복합 추정 · ${esc(it.mixedUse)}` : '아파트'}</dd></div>
       <div><dt>이번 공급</dt><dd class="mono">${it.totalUnits ? it.totalUnits.toLocaleString() + '세대' : '-'}</dd></div>
       <div><dt>접수 일정</dt><dd>${esc(schedule(it)) || '-'}</dd></div>
       <div><dt>당첨 발표</dt><dd>${esc(md(it.schedule?.winners)) || '-'}</dd></div>
@@ -278,7 +284,7 @@ function detailView(id) {
   window.scrollTo(0, 0);
 }
 
-// ── 서버(구글 시트)와 동기화: 직장·알림·점수 비율만 ──
+// ── 서버(구글 시트)와 동기화 ──
 let CONFIG = {};
 const uid = () => { let u = store.get('cy-uid'); if (!u) { u = (crypto.randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36)).toLowerCase(); store.set('cy-uid', u); } return u; };
 async function share(body) {
@@ -286,15 +292,10 @@ async function share(body) {
   // 구글 Apps Script는 CORS 응답을 주지 않아서 no-cors로 보낸다 (응답은 못 읽지만 저장은 된다)
   try { await fetch(CONFIG.sheetUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ uid: uid(), ...body }) }); } catch {}
 }
-// 우리 집 정보(소득·자산·생년월일 등)는 보내지 않는다. 서버가 쓰는 것만: 직장(출퇴근 계산), 알림 구독, 점수 비율·지역(아침 알림 순위)
+// 저장한 설정 전체와 알림 구독을 서버(구글 시트)에 보낸다. 출퇴근 계산·개인 알림·서비스 개선용
 async function syncShare(hh) {
   const push = (() => { try { return JSON.parse(store.get('cy-push') || 'null'); } catch { return null; } })();
-  const p = hh?.prefs || {};
-  const needed = p.workplaceAddress || push;
-  if (hh?.shareConsent && needed) {
-    await share({ settings: { shareConsent: true, prefs: { workplace: p.workplace || null, workplaceId: p.workplaceId || null, workplaceAddress: p.workplaceAddress || null, regions: p.regions, weights: p.weights } }, push });
-    store.set('cy-shared', '1');
-  }
+  if (hh?.shareConsent) { await share({ settings: hh, push }); store.set('cy-shared', '1'); }
   else if (store.get('cy-shared')) { await share({ delete: true }); store.del('cy-shared'); }
 }
 const pushHelper = () => ({

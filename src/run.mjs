@@ -5,6 +5,7 @@ import { collectApplyhome } from './collect/applyhome.mjs';
 import { collectLH, crossCheck } from './collect/lh.mjs';
 import { makeKakao } from './collect/kakao.mjs';
 import { comparables } from './collect/molit.mjs';
+import { NON_APT } from '../web/lib/rules.js';
 import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL, fitScore, eligibilityTag, placeLabel, shortName, marginHot, TH } from './analyze/judge.mjs';
 import { buzz, hotLevel } from './collect/buzz.mjs';
 import { competition, competitionStatus } from './collect/competition.mjs';
@@ -67,6 +68,15 @@ for (const m of matched) {
   if (hit) hit.lhUrl = m.noticeUrl;
 }
 const items = [...ah, ...onlyLH.map(i => ({ ...i, onlyLH: true }))];
+// 주상복합 추정: 이름에 '주상복합'이 있거나, 같은 단지 이름·주소로 오피스텔이 같이 분양되는 아파트
+const stem = n => String(n || '').replace(/\(.*?\)|\[.*?\]|\s|아파트|오피스텔|입주자모집공고|공고/g, '').slice(0, 6);
+const offis = items.filter(i => i.propertyType === '오피스텔');
+for (const it of items) {
+  if (it.propertyType) continue;
+  const twin = offis.find(o => (stem(o.name) && stem(o.name) === stem(it.name)) || (o.address && it.address && o.address.slice(0, 18) === it.address.slice(0, 18)));
+  if (/주상복합/.test(`${it.name} ${it.address || ''}`)) it.mixedUse = '공고명에 주상복합';
+  else if (twin) it.mixedUse = `같은 단지에서 오피스텔도 분양 (${twin.name})`;
+}
 
 // ── 분석 ──
 for (const it of items) {
@@ -79,6 +89,7 @@ for (const it of items) {
     out.geo = geo;
     if (scattered) out.analysisNote = '여러 단지 공가 세대를 한꺼번에 파는 공고라 단지별 목록은 공고문에서 확인하세요.';
     if (geo && !geo.precise) out.analysisNote = `정확한 주소가 아니라 "${geo.query}" 기준 대략 위치로 분석했어요.`;
+    if (NON_APT.has(out.category)) out.analysisNote = `${CATEGORY_LABEL[out.category]}은 아파트 실거래와 비교할 수 없어 안전마진을 계산하지 않아요.`;
     if (geo) {
       out.location = await kakao.nearby(geo);
       // 등록된 직장마다 출퇴근 예측 (앱에서 각자 고른 직장 기준으로 점수를 다시 계산한다)
@@ -90,6 +101,7 @@ for (const it of items) {
       const near = t => uniq.slice().sort((a, b) => Math.abs(a.exclusiveArea - t) - Math.abs(b.exclusiveArea - t))[0];
       const sizes = [...new Set([near(84), near(59), ...uniq.sort((a, b) => Math.abs(a.exclusiveArea - 84) - Math.abs(b.exclusiveArea - 84))].filter(Boolean))].slice(0, 3);
       out.market = [];
+      if (NON_APT.has(out.category)) sizes.length = 0;
       let pinnedKeys = null, pinnedOk = true;
       for (const m of sizes) {
         const newTown = !geo.precise || /지구|블[록럭]|BL|택지|신도시/.test(`${it.address || ''} ${it.name}`);
@@ -172,7 +184,7 @@ function summarize(hh, prefs = hh?.prefs) {
 }
 // 아침 푸시: 저장소 주인 세대(HOUSEHOLD_JSON) + 동의한 사용자 각자 기준. 이 결과는 공유 보고서에 넣지 않는다
 const pushSummary = summarize(household);
-const userPush = USERS.filter(u => u.push?.endpoint).map(u => ({ sub: u.push, summary: summarize(null, u.settings?.prefs || {}) }));
+const userPush = USERS.filter(u => u.push?.endpoint).map(u => ({ sub: u.push, summary: summarize(u.settings, u.settings?.prefs || {}) }));
 report.thresholds = TH;
 report.workplaces = WORKPLACES.map(({ id, name }) => ({ id, name })); // 사용자 직장은 commutes의 익명 ID로만 존재
 report.items.sort((a, b) => (a.window?.end || '').localeCompare(b.window?.end || ''));

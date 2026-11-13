@@ -6,7 +6,10 @@ export const won = n => (n == null ? '-' : n === 0 ? '0원' : Math.abs(n) >= 1e8
 export const CATEGORY_LABEL = {
   equityShare: '지분적립형', newlywedHopeTown: '신혼희망타운', noRank: '무순위(줍줍)',
   arbitrary: '임의공급', publicSale: '공공분양', private: '민영',
+  officetel: '오피스텔', urban: '도시형생활주택', lodging: '생활숙박시설',
 };
+/** 일반 아파트가 아닌 상품 */
+export const NON_APT = new Set(['officetel', 'urban', 'lodging']);
 
 const bd = s => (s && s.length === 7 ? `${s}-01` : s); // 'YYYY-MM' 또는 'YYYY-MM-DD'
 const yearsBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / (365.2425 * 864e5);
@@ -152,14 +155,18 @@ export function eligibility(it, h, TH) {
   }
   if (cat === 'private') push('자산 기준', '민영 일반공급은 자산 기준 없음 (특공 추첨분은 부동산 3억3100만 이하)', (+a.realEstate || 0) <= T.privateSpecialLottery.realEstate ? 'good' : 'bad');
 
-  // 무순위·임의공급: 당첨되면 유주택자가 된다 → 생애최초·신혼 특공 기회가 사라진다
-  if (cat === 'noRank' || cat === 'arbitrary') {
-    push('자격', cat === 'noRank' ? '무순위: 무주택 세대구성원, 통장 불필요' : '임의공급: 만 19세 이상 누구나, 통장 불필요', 'good');
+  // 아파트가 아닌 상품: 청약통장 없이 누구나. 주택 수에 들어가는지가 핵심
+  if (cat === 'officetel' || cat === 'lodging') {
+    push('자격', `${CATEGORY_LABEL[cat]}: 청약통장 없이 만 19세 이상 누구나`, 'good');
+    push('주택 수', cat === 'officetel' ? '오피스텔 분양권은 청약할 때 주택 수에 안 들어가 무주택이 유지돼요. 다만 주거용으로 쓰면 세금(취득세·양도세)에서는 주택으로 볼 수 있어요' : '생활숙박시설은 주택이 아니라 숙박시설이라 실거주(전입)가 막혀 있어요. 주거용으로 쓰면 이행강제금 대상이에요', cat === 'officetel' ? 'mid' : 'bad');
+  } else if (cat === 'urban' || cat === 'noRank' || cat === 'arbitrary') {
+    if (cat === 'urban') push('자격', '도시형생활주택: 청약통장 없이 만 19세 이상 누구나', 'good');
+    if (cat !== 'urban') push('자격', cat === 'noRank' ? '무순위: 무주택 세대구성원, 통장 불필요' : '임의공급: 만 19세 이상 누구나, 통장 불필요', 'good');
     // 무순위는 지자체가 거주지를 제한할 수 있다 (예: 서울 공고는 서울 거주자만)
     const sido = h.residence?.sido;
     if (cat === 'noRank' && sido && it.region && !sido.startsWith(it.region)) push('거주지 제한', `${sido} 거주 → ${it.region} 무순위는 해당 지역 거주자로 제한되는 경우가 많아요. 공고문 '신청자격' 확인`, 'mid');
     const sp = specialTypes(h, date).out;
-    push('당첨 시 주의', `당첨되면 유주택자가 돼요${sp.length ? ` → ${sp.join('·')} 특공 기회가 사라져요` : ''}. 줍줍 당첨은 재당첨 제한도 걸릴 수 있어요`, sp.length ? 'bad' : 'mid');
+    push('당첨 시 주의', `당첨되면 유주택자가 돼요${cat === 'urban' ? '(도시형생활주택도 주택, 전용 20㎡ 이하 1채만 예외)' : ''}${sp.length ? ` → ${sp.join('·')} 특공 기회가 사라져요` : ''}${cat === 'urban' ? '' : '. 줍줍 당첨은 재당첨 제한도 걸릴 수 있어요'}`, sp.length ? 'bad' : 'mid');
   } else for (const c of applicantChecks(it, h, date, cat, T)) checks.push(c);
 
   const hardBad = checks.filter(c => c.s === 'bad' && c.k !== '당첨 시 주의');

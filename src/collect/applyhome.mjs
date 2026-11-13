@@ -8,7 +8,7 @@ export const METRO = new Set(['서울', '인천', '경기']);
 const OPS = {
   apt:      { detail: 'getAPTLttotPblancDetail',      model: 'getAPTLttotPblancMdl' },
   remndr:   { detail: 'getRemndrLttotPblancDetail',   model: 'getRemndrLttotPblancMdl' },
-  // 임의공급은 OPT 계열 API에 오피스텔과 같이 섞여 옴 → HOUSE_SECD_NM으로 거름
+  // OPT 계열: 임의공급 + 오피스텔·도시형생활주택·생활숙박시설·민간임대가 섞여 옴 → HOUSE_SECD_NM으로 나눔 (민간임대는 분양이 아니라 뺌)
   opt:      { detail: 'getOPTLttotPblancDetail',      model: 'getOPTLttotPblancMdl' },
 };
 
@@ -58,9 +58,14 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
   for (const [kind, op] of Object.entries(OPS)) {
     const { rows, total } = await all(op.detail, key, { 'cond[RCRIT_PBLANC_DE::GTE]': since });
     let kept = 0;
+    const types = {};
     for (const row of rows) {
-      if (!METRO.has(row.SUBSCRPT_AREA_CODE_NM)) continue;
-      if (kind === 'opt' && row.HOUSE_SECD_NM !== '임의공급') continue;
+      if (!METRO.has(row.SUBSCRPT_AREA_CODE_NM) && !/^(서울|경기|인천)/.test(row.HSSPLY_ADRES || '')) continue;
+      const t = String(row.HOUSE_SECD_NM || '');
+      if (kind === 'opt') types[t] = (types[t] || 0) + 1;
+      // 아파트가 아닌 상품: 오피스텔 / 도시형생활주택 / 생활숙박시설. 민간임대·공공지원임대는 분양이 아니라 제외
+      const propertyType = kind !== 'opt' ? null : /오피스텔/.test(t) ? '오피스텔' : /도시형/.test(t) ? '도시형생활주택' : /생활숙박|생숙/.test(t) ? '생활숙박시설' : null;
+      if (kind === 'opt' && t !== '임의공급' && !propertyType) continue;
       const w = windowOf(row);
       // 접수가 끝나지 않은 공고는 전부 (오늘 새로 나와서 접수가 2~3주 뒤인 공고도 포함)
       if (!w.end || w.end < from) continue;
@@ -70,9 +75,10 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
         houseManageNo: row.HOUSE_MANAGE_NO,
         pblancNo: row.PBLANC_NO,
         name: row.HOUSE_NM,
-        typeName: row.HOUSE_SECD_NM,           // APT / 신혼희망타운 / 무순위 / 임의공급 ...
+        typeName: row.HOUSE_SECD_NM,           // APT / 신혼희망타운 / 무순위 / 임의공급 / 오피스텔 ...
+        propertyType,                          // 아파트가 아니면 '오피스텔' 등
         detailType: row.HOUSE_DTL_SECD_NM || null, // 민영 / 국민
-        region: row.SUBSCRPT_AREA_CODE_NM,
+        region: row.SUBSCRPT_AREA_CODE_NM || (row.HSSPLY_ADRES || '').match(/^(서울|경기|인천)/)?.[1] || null,
         address: row.HSSPLY_ADRES,
         totalUnits: row.TOT_SUPLY_HSHLDCO,
         noticeDate: d(row.RCRIT_PBLANC_DE),
@@ -103,19 +109,20 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
       });
       kept++;
     }
-    stats[kind] = { fetched: rows.length, total, kept };
-    log(`[applyhome] ${kind}: 전체 ${total} / 수도권·기간 해당 ${kept}`);
+    stats[kind] = { fetched: rows.length, total, kept, ...(kind === 'opt' ? { types } : {}) };
+    log(`[applyhome] ${kind}: 전체 ${total} / 수도권·기간 해당 ${kept}${kind === 'opt' ? ` · 유형 ${JSON.stringify(types)}` : ''}`);
   }
 
   // 주택형별 분양가·특공 세대수 (공고별로 조회)
   for (const it of items) {
     const { rows } = await all(it._modelOp, key, { 'cond[HOUSE_MANAGE_NO::EQ]': it.houseManageNo });
+    if (it.propertyType && rows[0]) log(`[applyhome] ${it.propertyType} 주택형 필드: ${Object.keys(rows[0]).join(',')}`);
     it.models = rows.map(m => ({
       type: (m.HOUSE_TY || '').trim(),                         // 예: 084.9600A
-      exclusiveArea: parseFloat(m.HOUSE_TY) || null,           // 전용면적
+      exclusiveArea: parseFloat(m.HOUSE_TY) || parseFloat(m.EXCLUSE_AR) || null, // 전용면적 (오피스텔은 EXCLUSE_AR)
       supplyArea: parseFloat(m.SUPLY_AR) || null,              // 공급면적
       pyeong: m.SUPLY_AR ? +(parseFloat(m.SUPLY_AR) / 3.3058).toFixed(1) : null,
-      topPrice: m.LTTOT_TOP_AMOUNT ? parseInt(String(m.LTTOT_TOP_AMOUNT).replace(/,/g, ''), 10) * 10000 : null,
+      topPrice: (v => (v ? parseInt(String(v).replace(/,/g, ''), 10) * 10000 : null))(m.LTTOT_TOP_AMOUNT || m.SUPLY_AMOUNT),
       general: m.SUPLY_HSHLDCO ?? null,
       special: m.SPSPLY_HSHLDCO ?? null,
       specialBreakdown: {

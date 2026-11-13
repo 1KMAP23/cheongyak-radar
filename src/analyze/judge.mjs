@@ -7,6 +7,9 @@ export const TH = JSON.parse(readFileSync(new URL('../../config/thresholds.json'
 // ── 1단계: 자격 ─────────────────────────────────────────────
 export function category(it) {
   const n = it.name || '';
+  if (it.propertyType === '오피스텔') return 'officetel';
+  if (it.propertyType === '도시형생활주택') return 'urban';
+  if (it.propertyType === '생활숙박시설') return 'lodging';
   if (/지분적립/.test(n)) return 'equityShare';
   if (it.typeName === '신혼희망타운' || it.kind === 'lh-newlywed' || /신혼희망/.test(n)) return 'newlywedHopeTown';
   // LH 공가세대 매각: 청약통장 없이 추첨. 무주택 조건이면 무순위, 유주택도 되면 임의공급과 같게 본다

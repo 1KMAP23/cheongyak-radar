@@ -1,5 +1,5 @@
 // 설정 화면 하나: 우리 집 정보 + 직장 + 추천 점수 비율 + 알림 + 이 기기
-// 우리 집 정보는 이 기기에만 저장. 서버에는 출퇴근 계산·아침 알림에 필요한 것(직장 주소·알림 정보·점수 비율·지역)만 보낸다.
+// 설정은 이 기기에 저장되고, 서버 주소가 설정돼 있으면 서버(구글 시트)에도 저장된다.
 import { DEFAULT_WEIGHTS, normWeights } from './lib/rules.js';
 const MAN = 1e4; // 입력은 만원 단위
 const WK = [['margin', '안전마진'], ['commute', '출퇴근'], ['location', '입지 (지하철·학군·규모·브랜드)'], ['buzz', 'SNS 화제']];
@@ -117,6 +117,7 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
     </section>
 
     <div class="err" id="hh-err"></div>
+    ${canShare ? '<p class="sub">입력한 정보는 출퇴근 계산·알림·서비스 개선을 위해 서버에 저장돼요.</p>' : ''}
     <div class="actions"><button class="primary" id="save">저장하고 목록 보기</button><button id="reset">입력값 지우기</button></div>
 
     <section class="panel"><h2>다른 기기로 옮기기</h2>
