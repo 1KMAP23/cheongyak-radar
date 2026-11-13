@@ -1,8 +1,17 @@
-// 우리 집 정보 설정: 공고문과 대조하는 데 필요한 값을 체크박스·입력칸으로 받는다.
-// 이 기기에만 저장되고 서버로 보내지 않는다. 다른 기기로 옮길 때는 내보내기/가져오기.
+// 설정 화면 하나: 우리 집 정보 + 직장 + 추천 점수 비율 + 알림 + 운영자에게 보내기 동의 + 이 기기
+// 기본은 이 기기에만 저장. '운영자에게 보내기'에 동의한 사람만 설정이 운영자 구글 시트로 간다.
+import { DEFAULT_WEIGHTS, normWeights } from './lib/rules.js';
 const MAN = 1e4; // 입력은 만원 단위
+const WK = [['margin', '안전마진'], ['commute', '출퇴근'], ['location', '입지 (지하철·학군·규모·브랜드)'], ['buzz', 'SNS 화제']];
 
-export function householdView({ app, esc, workplaces, current, onSave }) {
+/** 직장 주소 → 공개 데이터에 쓰는 익명 ID (서버 src/run.mjs의 workplaceId와 같은 방식) */
+export async function workplaceId(addr) {
+  const n = String(addr || '').replace(/\s+/g, ' ').trim();
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(n));
+  return 'w-' + [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
+}
+
+export function householdView({ app, esc, workplaces, current, onSave, push, onForget, canShare }) {
   const h = current || { prefs: { regions: ['서울', '경기', '인천'], workplace: workplaces[0]?.id || '' }, homeless: true };
   const v = (x, d = '') => (x == null ? d : esc(x));
   const m = x => (x == null || x === '' ? '' : Math.round(x / MAN));
@@ -25,9 +34,15 @@ export function householdView({ app, esc, workplaces, current, onSave }) {
     ${chk(`car-in-${i}`, c.inHousehold !== false, '같은 등본 세대원 명의')}
     <button type="button" class="link" data-del>삭제</button></div>`;
 
+  const W = normWeights(h.prefs?.weights);
+  const custom = !!h.prefs?.workplaceAddress;
   app.innerHTML = `<div class="wrap hh">
     <a class="btn back" href="#">← 목록</a>
-    <div><h1>우리 집 정보</h1><p class="sub">공고문의 자격 기준과 비교하는 데 써요. <b>이 기기에만 저장</b>되고 다른 사람에게 보이지 않아요. 모르는 칸은 비워 두면 그 항목만 '확인 필요'로 나와요.</p></div>
+    <div><h1>설정</h1><p class="sub">우리 집 정보를 넣으면 자격(❌·⚠️)과 추천 순위가 우리 집 기준으로 바뀌어요. 모르는 칸은 비워 두면 그 항목만 '확인 필요'로 나와요.</p></div>
+
+    <section class="panel"><h2>이름 <span class="sub">선택</span></h2>
+      ${fld('nick', '운영자가 알아볼 수 있는 이름 (별명 가능)', v(h.nickname), 'text', 'maxlength="30" placeholder="예: 민수네"')}
+    </section>
 
     <section class="panel"><h2>1. 신청자와 세대</h2>
       <p class="sub">청약을 넣을 사람(신청자) 기준으로 적어요. 부부라면 보통 세대주가 신청자예요.</p>
@@ -80,12 +95,38 @@ export function householdView({ app, esc, workplaces, current, onSave }) {
       ${money('amt', '납입 인정 금액', h.accounts?.applicant?.recognizedAmount)}
     </section>
 
-    <section class="panel"><h2>7. 원하는 조건</h2>
-      <label class="fld"><span>직장 (출퇴근 계산)</span><select id="wp"><option value="">선택 안 함</option>${workplaces.map(w => `<option value="${esc(w.id)}" ${h.prefs?.workplace === w.id ? 'selected' : ''}>${esc(w.name)} · ${esc(w.address || '')}</option>`).join('')}</select></label>
-      <p class="sub">목록에 직장이 없으면 앱 관리자에게 주소를 알려 주세요. 등록되면 매일 아침 그 직장까지 출퇴근 시간이 계산돼요.</p>
+    <section class="panel"><h2>7. 직장·관심 조건</h2>
+      <label class="fld"><span>직장 (차 출퇴근 시간 계산)</span><select id="wp"><option value="">선택 안 함</option>${workplaces.map(w => `<option value="${esc(w.id)}" ${!custom && h.prefs?.workplace === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}<option value="__custom" ${custom ? 'selected' : ''}>직접 입력</option></select></label>
+      <div id="wp-custom" class="sub-grid" ${custom ? '' : 'hidden'}>
+        ${fld('wp-name', '직장 이름', v(h.prefs?.workplaceName), 'text', 'maxlength="30" placeholder="예: 우리 회사"')}
+        ${fld('wp-addr', '직장 주소 (도로명)', v(h.prefs?.workplaceAddress), 'text', 'maxlength="100" placeholder="예: 서울 송파구 올림픽로 300"')}
+        <p class="sub">출퇴근 시간은 서버에서 계산해서, 아래 <b>운영자에게 보내기</b>에 동의해야 다음 평일 아침부터 나와요. 앱 데이터에는 주소 대신 알아볼 수 없는 번호만 들어가요.</p>
+      </div>
       <div class="ck-row">${['서울', '경기', '인천'].map(r => chk(`rg-${r}`, (h.prefs?.regions || ['서울', '경기', '인천']).includes(r), `${r} 공고 보기`)).join('')}</div>
-      ${money('maxp', '최대 분양가', h.prefs?.maxPrice, '넘는 단지는 💸 표시')}
+      ${money('maxp', '최대 분양가', h.prefs?.maxPrice, '넘는 단지는 💸 표시 · 비워 두면 표시 안 함')}
     </section>
+
+    <section class="panel"><h2>8. 추천 점수 비율</h2>
+      <p class="sub">무엇을 더 중요하게 볼지 정해요. 합이 100이 아니면 저장할 때 비율대로 맞춰요.</p>
+      ${WK.map(([k, l]) => `<label class="fld"><span>${l}</span><span class="unit"><input id="w-${k}" type="number" inputmode="numeric" min="0" max="100" step="1" value="${W[k]}"><i>점</i></span></label>`).join('')}
+      <p class="sub" id="w-sum"></p>
+      <button type="button" class="btn" id="w-reset">기본값 (마진 ${DEFAULT_WEIGHTS.margin} · 출퇴근 ${DEFAULT_WEIGHTS.commute} · 입지 ${DEFAULT_WEIGHTS.location} · SNS ${DEFAULT_WEIGHTS.buzz})</button>
+    </section>
+
+    <section class="panel"><h2>9. 매일 아침 8시 알림</h2>
+      ${push?.standalone ? `<p class="sub">평일 아침 8시에 내 추천 순위로 알림이 와요. 알림을 켜고 아래 <b>운영자에게 보내기</b>에 동의해야 받을 수 있어요.</p>
+        <p><button class="btn" id="push" type="button">${push.subscribed ? '알림 켜짐 ✓ (다시 연결)' : '알림 켜기'}</button></p><div class="err" id="perr"></div>`
+      : `<p class="sub">아이폰 알림은 홈 화면에 추가한 앱에서만 켤 수 있어요. Safari 아래쪽 공유 버튼 → <b>홈 화면에 추가</b> → 홈 화면 아이콘으로 다시 열어 주세요.</p>`}
+    </section>
+
+    ${canShare ? `<section class="panel"><h2>10. 운영자에게 보내기</h2>
+      ${chk('share', !!h.shareConsent, '위 설정을 앱 운영자에게 보내는 데 동의해요', '동의하지 않으면 모든 정보가 이 기기에만 남아요')}
+      <details><summary>보내는 내용과 이유</summary><p class="sub" style="margin-top:6px">
+        <b>보내는 것:</b> 이 화면의 모든 입력값(생년월일·세대주·결혼·자녀·소득·자산·차량·청약통장·직장 주소·점수 비율), 알림 수신 정보, 이름(입력한 경우).<br>
+        <b>왜:</b> 직장까지 출퇴근 시간 계산, 내 기준 아침 알림 발송, 앱 개선.<br>
+        <b>누가 봐요:</b> 앱 운영자 한 명(구글 시트). 다른 사용자에게는 보이지 않아요.<br>
+        <b>그만두기:</b> 체크를 끄고 저장하거나 '입력값 지우기'를 누르면 운영자 시트에서도 지워요.</p></details>
+    </section>` : ''}
 
     <div class="err" id="hh-err"></div>
     <div class="actions"><button class="primary" id="save">저장하고 목록 보기</button><button id="reset">입력값 지우기</button></div>
@@ -95,6 +136,8 @@ export function householdView({ app, esc, workplaces, current, onSave }) {
       <textarea id="json">${esc(current ? JSON.stringify(current) : '')}</textarea>
       <div class="actions" style="margin-top:8px"><button id="copy">코드 복사</button><button id="import">붙여 넣은 코드 가져오기</button></div>
     </section>
+
+    <section class="panel"><h2>이 기기</h2><p class="sub">비밀번호를 지우면 다음에 다시 물어봐요.</p><p style="margin-top:8px"><button id="forget">비밀번호 지우기</button></p></section>
   </div>`;
 
   const $ = id => document.getElementById(id);
@@ -104,6 +147,15 @@ export function householdView({ app, esc, workplaces, current, onSave }) {
   $('add-kid').onclick = () => { $('kids').insertAdjacentHTML('beforeend', kidRow({}, kidN++)); bindDel(); };
   $('add-car').onclick = () => { $('cars').insertAdjacentHTML('beforeend', carRow({}, carN++)); bindDel(); };
 
+  $('wp').onchange = () => { $('wp-custom').hidden = $('wp').value !== '__custom'; };
+  const sumW = () => { const t = WK.reduce((s, [k]) => s + (+$(`w-${k}`).value || 0), 0); $('w-sum').textContent = `합계 ${t}점${t === 100 ? '' : ' → 저장하면 100점에 맞춰요'}`; };
+  WK.forEach(([k]) => ($(`w-${k}`).oninput = sumW)); sumW();
+  $('w-reset').onclick = () => { WK.forEach(([k]) => ($(`w-${k}`).value = DEFAULT_WEIGHTS[k])); sumW(); };
+  $('forget').onclick = () => onForget?.();
+  if ($('push')) $('push').onclick = async () => {
+    try { await push.subscribe(); $('push').textContent = '알림 켜짐 ✓'; $('perr').textContent = canShare && !$('share')?.checked ? '알림을 받으려면 아래 운영자에게 보내기에 동의하고 저장해 주세요.' : '저장하면 다음 평일 아침부터 와요.'; }
+    catch (e) { $('perr').textContent = e.message; }
+  };
   const num = id => { const x = $(id)?.value; return x === '' || x == null ? null : +x; };
   const won = id => { const x = num(id); return x == null ? null : x * MAN; };
   const date = id => $(id)?.value || null;
@@ -139,19 +191,30 @@ export function householdView({ app, esc, workplaces, current, onSave }) {
       dualIncome: incA > 0 && incP > 0,
       assets: { realEstate: won('re') || 0, jeonseDeposit: won('jeonse') || 0, financial: won('fin') || 0, debt: won('debt') || 0, cars: carsOut },
       accounts: { applicant: { bank: $('bank').value.trim(), openedAt: date('opened'), paidCount: num('paid'), recognizedAmount: won('amt') } },
-      prefs: { workplace: $('wp').value || null, regions: ['서울', '경기', '인천'].filter(r => $(`rg-${r}`).checked), maxPrice: won('maxp') },
+      prefs: {
+        workplace: $('wp').value === '__custom' ? null : $('wp').value || null,
+        workplaceName: $('wp').value === '__custom' ? $('wp-name').value.trim() || '내 직장' : null,
+        workplaceAddress: $('wp').value === '__custom' ? $('wp-addr').value.trim() || null : null,
+        regions: ['서울', '경기', '인천'].filter(r => $(`rg-${r}`).checked), maxPrice: won('maxp'),
+        weights: normWeights(Object.fromEntries(WK.map(([k]) => [k, num(`w-${k}`) ?? 0]))),
+      },
+      nickname: $('nick').value.trim() || null,
+      shareConsent: !!$('share')?.checked,
     };
   }
 
   // 화면에 없는 값(배우자 통장 등)은 기존 값을 지킨다
   const merged = () => { const o = collect(), c = current || {};
     return { ...c, ...o, incomeTaxYears: { ...c.incomeTaxYears, ...o.incomeTaxYears }, accounts: { ...c.accounts, ...o.accounts }, prefs: { ...c.prefs, ...o.prefs } }; };
-  $('save').onclick = () => {
+  $('save').onclick = async () => {
     const out = merged();
+    if (out.prefs.workplaceAddress) out.prefs.workplaceId = await workplaceId(out.prefs.workplaceAddress);
+    else delete out.prefs.workplaceId;
     const err = [];
     if ($('married').checked && !out.marriageDate) err.push('혼인신고일을 넣어 주세요.');
     if ($('head').checked && !date('head-since')) err.push('세대주가 된 날을 넣어 주세요. 생애최초는 공고일 당시 세대주여야 해요.');
     if (!out.prefs.regions.length) err.push('관심 지역을 하나 이상 골라 주세요.');
+    if ($('wp').value === '__custom' && !out.prefs.workplaceAddress) err.push('직장 주소를 넣어 주세요.');
     if (err.length) { $('hh-err').textContent = err.join(' '); $('hh-err').scrollIntoView({ block: 'center' }); return; }
     onSave(out);
   };

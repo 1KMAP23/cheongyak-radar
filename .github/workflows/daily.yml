@@ -21,6 +21,8 @@ jobs:
       DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
       KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
       APP_PASSPHRASE: ${{ secrets.APP_PASSPHRASE }}
+      SHEET_URL: ${{ secrets.SHEET_URL }}
+      SHEET_TOKEN: ${{ secrets.SHEET_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,7 +39,13 @@ jobs:
         with: { path: dist/site }
       - name: 푸시용 요약 보관
         uses: actions/upload-artifact@v4
-        with: { name: summary, path: dist/summary.json, retention-days: 1 }
+        with:
+          name: summary
+          path: |
+            dist/summary.json
+            dist/push-users.enc
+          retention-days: 1
+          if-no-files-found: ignore
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -68,6 +76,7 @@ jobs:
       - name: 아이폰 푸시
         env:
           PUSH_SUBSCRIPTIONS: ${{ secrets.PUSH_SUBSCRIPTIONS }}
+          SHEET_TOKEN: ${{ secrets.SHEET_TOKEN }}
           VAPID_PUBLIC_KEY: BDGbFHT5-WKQMTzp1Y_tj_5ByKKSqmjqoVrW-P67Yf2_EUMiaAS6Xabst53usz-kz1tCr6UA8OA_vk-gl47xPCA
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: node scripts/push.mjs

@@ -1,6 +1,6 @@
 // 청약 레이더 웹앱: 잠금 해제 → 목록 → 단지별 분석 페이지 → 공고문 원문 링크
 // 자격·점수는 이 기기에 저장된 '우리 집 정보'로 계산한다 (서버 데이터에는 세대 정보가 없다)
-import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo } from './lib/rules.js';
+import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo, normWeights } from './lib/rules.js';
 import { householdView } from './household.js';
 const VAPID_PUBLIC = 'BDGbFHT5-WKQMTzp1Y_tj_5ByKKSqmjqoVrW-P67Yf2_EUMiaAS6Xabst53usz-kz1tCr6UA8OA_vk-gl47xPCA';
 const app = document.getElementById('app');
@@ -15,7 +15,10 @@ const loadHH = () => { try { return JSON.parse(store.get('cy-household') || 'nul
 function enrich(raw) {
   const HH = loadHH();
   const wps = raw.workplaces || [];
-  const wp = HH ? wps.find(w => w.id === HH.prefs?.workplace) || null : wps[0] || null;
+  // 직접 입력한 직장은 주소 대신 익명 ID(workplaceId)로 출퇴근 데이터를 찾는다
+  const wp = HH?.prefs?.workplaceId ? { id: HH.prefs.workplaceId, name: HH.prefs.workplaceName || '내 직장', custom: true }
+    : HH ? wps.find(w => w.id === HH.prefs?.workplace) || null : wps[0] || null;
+  const weights = HH?.prefs?.weights;
   const regions = HH?.prefs?.regions?.length ? HH.prefs.regions : null;
   const items = [];
   let hidden = 0, ended = 0;
@@ -27,9 +30,11 @@ function enrich(raw) {
     const it = { ...src, closingToday: src.window?.end === today };
     it.commute = wp ? src.commutes?.[wp.id] || null : null;
     it.eligibility = eligibility(it, HH, raw.thresholds);
-    it.commuteResult = wp ? commuteVerdict(it.commute, wp.name) : { verdict: '확인 필요', text: '설정에서 직장을 고르면 출퇴근 시간을 계산해요' };
+    it.commuteResult = !wp ? { verdict: '확인 필요', text: '설정에서 직장을 고르면 출퇴근 시간을 계산해요' }
+      : wp.custom && !it.commute ? { verdict: '확인 필요', text: HH.shareConsent ? '직장 등록 중 · 다음 평일 아침 분석부터 출퇴근 시간이 나와요' : '직접 입력한 직장은 설정의 운영자에게 보내기에 동의해야 출퇴근 시간을 계산해요' }
+      : commuteVerdict(it.commute, wp.name);
     it.overall = overall(it.eligibility, it.invest, it.commuteResult);
-    it.fit = fitScore(it);
+    it.fit = fitScore(it, weights);
     it.eligTag = eligibilityTag(it.eligibility);
     const minPrice = Math.min(...(it.models || []).map(m => m.topPrice).filter(Boolean));
     it.overBudget = HH?.prefs?.maxPrice && isFinite(minPrice) && minPrice > HH.prefs.maxPrice;
@@ -75,6 +80,10 @@ function lockView(msg = '') {
 }
 
 async function boot() {
+  try { CONFIG = await (await fetch('config.json', { cache: 'no-store' })).json(); } catch { CONFIG = {}; }
+  // 동의한 사람은 하루 한 번 최신 설정·알림 정보를 다시 보낸다 (알림 정보는 가끔 바뀐다)
+  const hh = loadHH(), last = store.get('cy-synced');
+  if (hh?.shareConsent && last !== kstToday()) { syncShare(hh); store.set('cy-synced', kstToday()); }
   const p = store.get('cy-pass');
   if (!p) return lockView();
   try { RAW = await decrypt(p); R = enrich(RAW); route(); }
@@ -113,20 +122,21 @@ function nextStep(it) {
   return a === t || (a <= t && (b || a) >= t) ? `${l} 오늘${b && b !== t ? `~${md(b)}` : ''}` : `${l} ${md(a)}${b && b !== a ? '~' + md(b) : ''}`;
 }
 function listView() {
+  const W = normWeights(R.HH?.prefs?.weights);
   const shown = FILTERS.filter(([k, , f]) => k === 'all' || k === filter || R.items.some(f));
   const items = R.items.filter(match);
   // 오늘 마감은 맨 위에 따로, 나머지는 적합도 순. 자격 미달도 빼지 않고 ❌ 태그로 표시
   const banners = [
     R.warnings.length && `<div class="banner warn">⚠️ ${R.warnings.map(esc).join('<br>')}</div>`,
     R.stale && `<div class="banner warn">마지막 분석이 ${new Date(R.generatedAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}이에요. 주말·공휴일엔 갱신이 없어요. 접수 끝난 공고 ${R.ended}건은 뺐어요.</div>`,
-    !R.HH && '<a class="banner info" href="#household"><b>🏠 우리 집 정보를 입력해 주세요 →</b><br><span class="sub">자격(❌·⚠️)·자금·출퇴근을 이 기기에서 판정해요.</span></a>',
+    !R.HH && '<a class="banner info" href="#settings"><b>⚙︎ 설정에서 우리 집 정보를 입력해 주세요 →</b><br><span class="sub">자격(❌·⚠️)·출퇴근·추천 순위가 우리 집 기준으로 바뀌어요.</span></a>',
   ].filter(Boolean).join('');
   app.innerHTML = `<div class="wrap">
     <div class="top"><div><h1>청약 레이더</h1><p class="sub">${new Date(R.generatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} 업데이트 · ${R.items.length}건</p></div>
-      <span class="topbtns"><a class="btn" href="#household" aria-label="우리 집 정보">🏠</a><a class="btn" href="#settings" aria-label="설정">⚙︎</a></span></div>
+      <span class="topbtns"><a class="btn" href="#settings" aria-label="설정">⚙︎ 설정</a></span></div>
     ${banners}
     <div class="chips scroll" role="group" aria-label="필터">${shown.map(([k, l, f]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l} <b class="mono">${R.items.filter(f).length}</b></button>`).join('')}</div>
-    <h2 class="sec">👍 추천 순위 <span class="sub">마진 40 · 출퇴근 30 · 입지 25 · SNS 5</span></h2>
+    <h2 class="sec">👍 추천 순위 <a class="sub" href="#settings">마진 ${W.margin} · 출퇴근 ${W.commute} · 입지 ${W.location} · SNS ${W.buzz} ✎</a></h2>
     <div class="list">${items.length ? items.map(card).join('') : '<p class="sub">조건에 맞는 공고가 없어요.</p>'}</div>
     <p class="sub">청약홈 ${R.sources?.applyhome?.ok === false ? '수집 실패' : '전체'} + LH 단독 공고 ${R.crossCheck?.onlyLH?.length ?? 0}건 포함${R.hidden ? ` · 관심 지역 밖 ${R.hidden}건 숨김` : ''}.<br>투자 자문이 아닌 참고 자료예요. 자격·금액은 반드시 공고문 원문으로 확인하세요.</p>
   </div>`;
@@ -221,7 +231,7 @@ function detailView(id) {
       <div class="vrow"><span class="pill ${it.overall.star ? 'v-star' : 'v-' + esc(inv.verdict)}">⭐ 조건</span><span>${it.overall.star ? '자격 가능 + 투자 추천 + 출퇴근 가능을 모두 만족해요' : '자격 가능 + 투자 추천 + 출퇴근 30분 이내 중 ' + [el.status !== '가능' && '자격', inv.verdict !== '추천' && '투자', com.verdict !== '가능' && '출퇴근'].filter(Boolean).join('·') + ' 미충족'}</span></div>
     </div></section>
 
-    ${it.fit ? `<section class="panel"><h2>나에게 맞는 정도 <span class="mono">${it.fit.total}점</span> <span class="sub">/ 100</span></h2><div class="bars">${it.fit.parts.map(p => `<div><b>${esc(p.k)}</b><span class="bar"><i style="width:${Math.round(p.v / p.max * 100)}%"></i></span><span class="mono">${p.v}/${p.max}</span><span class="sub">${esc(p.why)}</span></div>`).join('')}</div></section>` : ''}
+    ${it.fit ? `<section class="panel"><h2>나에게 맞는 정도 <span class="mono">${it.fit.total}점</span> <span class="sub">/ 100</span></h2><div class="bars">${it.fit.parts.filter(p => p.max > 0).map(p => `<div><b>${esc(p.k)}</b><span class="bar"><i style="width:${Math.round(p.v / p.max * 100)}%"></i></span><span class="mono">${p.v}/${p.max}</span><span class="sub">${esc(p.why)}</span></div>`).join('')}</div></section>` : ''}
 
     <section class="panel"><h2>주변 시세 · 안전마진</h2>
       ${marketRows ? `<div class="tbl"><table><thead><tr><th>평형</th><th>분양가</th><th>주변 시세</th><th>마진(취득세·확장비 차감)</th></tr></thead><tbody>${marketRows}</tbody></table></div>` : '<p class="sub">비교할 주택형 정보가 없어요. 공고문에서 확인해 주세요.</p>'}
@@ -262,45 +272,48 @@ function detailView(id) {
   window.scrollTo(0, 0);
 }
 
-// ── 설정: 알림 켜기 ──
+// ── 운영자 시트로 보내기 (동의한 사람만) ──
+let CONFIG = {};
+const uid = () => { let u = store.get('cy-uid'); if (!u) { u = (crypto.randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36)).toLowerCase(); store.set('cy-uid', u); } return u; };
+async function share(body) {
+  if (!CONFIG.sheetUrl) return;
+  // 구글 Apps Script는 CORS 응답을 주지 않아서 no-cors로 보낸다 (응답은 못 읽지만 저장은 된다)
+  try { await fetch(CONFIG.sheetUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ uid: uid(), ...body }) }); } catch {}
+}
+async function syncShare(hh) {
+  const push = (() => { try { return JSON.parse(store.get('cy-push') || 'null'); } catch { return null; } })();
+  if (hh?.shareConsent) { await share({ settings: hh, push }); store.set('cy-shared', '1'); }
+  else if (store.get('cy-shared')) { await share({ delete: true }); store.del('cy-shared'); }
+}
+const pushHelper = () => ({
+  standalone: window.matchMedia('(display-mode: standalone)').matches || navigator.standalone,
+  subscribed: !!store.get('cy-push'),
+  async subscribe() {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') throw new Error('알림이 허용되지 않았어요. 설정 앱 → 알림 → 청약레이더에서 켜 주세요.');
+    const reg = await navigator.serviceWorker.ready;
+    const key = Uint8Array.from(atob(VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - VAPID_PUBLIC.length % 4) % 4)), c => c.charCodeAt(0));
+    const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
+    store.set('cy-push', JSON.stringify(sub.toJSON()));
+    const hh = loadHH(); if (hh?.shareConsent) await syncShare(hh);
+    return sub.toJSON();
+  },
+});
 function settingsView() {
-  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-  app.innerHTML = `<div class="wrap">
-    <a class="btn back" href="#">← 목록</a><h1>설정</h1>
-    <a class="panel" href="#household" style="display:block;text-decoration:none;color:inherit"><h2>🏠 우리 집 정보 →</h2><p class="sub">${R.HH ? '입력됨 · 고치기' : '아직 입력 전'}</p></a>
-    <section class="panel"><h2>매일 아침 알림</h2>
-      ${standalone ? `<p class="sub">아래 버튼을 누르고 알림을 허용한 뒤, 나오는 코드를 복사해서 Claude에게 보내거나 GitHub 비밀값 <b>PUSH_SUBSCRIPTIONS</b>에 넣어 주세요.</p>
-        <p style="margin-top:10px"><button class="primary" id="sub">알림 켜기</button></p><div class="err" id="perr"></div>
-        <div id="out" hidden><textarea id="code" readonly></textarea><p style="margin-top:8px"><button id="copy">코드 복사</button></p></div>`
-      : `<p class="sub">아이폰 알림은 홈 화면에 추가한 앱에서만 켤 수 있어요. Safari 아래쪽 공유 버튼 → <b>홈 화면에 추가</b> → 홈 화면의 청약레이더 아이콘으로 다시 열어 주세요.</p>`}
-    </section>
-    <section class="panel"><h2>이 기기</h2><p class="sub">저장된 비밀번호를 지우면 다음에 다시 물어봐요.</p><p style="margin-top:10px"><button id="forget">비밀번호 지우기</button></p></section>
-  </div>`;
-  document.getElementById('forget').onclick = () => { store.del('cy-pass'); R = RAW = null; location.hash = ''; lockView(); };
-  const btn = document.getElementById('sub');
-  if (btn) btn.onclick = async () => {
-    const err = document.getElementById('perr');
-    try {
-      const perm = await Notification.requestPermission();
-      if (perm !== 'granted') { err.textContent = '알림이 허용되지 않았어요. 설정 앱 → 알림 → 청약레이더에서 켜 주세요.'; return; }
-      const reg = await navigator.serviceWorker.ready;
-      const key = Uint8Array.from(atob(VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - VAPID_PUBLIC.length % 4) % 4)), c => c.charCodeAt(0));
-      const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
-      document.getElementById('code').value = JSON.stringify([sub.toJSON()]);
-      document.getElementById('out').hidden = false; err.textContent = '';
-    } catch (e) { err.textContent = '알림 설정 실패: ' + e.message; }
-  };
-  const copy = document.getElementById('copy');
-  if (copy) copy.onclick = async () => { const t = document.getElementById('code'); try { await navigator.clipboard.writeText(t.value); copy.textContent = '복사됨'; } catch { t.select(); } };
+  householdView({ app, esc, workplaces: RAW.workplaces || [], current: loadHH(), push: pushHelper(), canShare: !!CONFIG.sheetUrl,
+    onForget: () => { store.del('cy-pass'); R = RAW = null; location.hash = ''; lockView(); },
+    onSave: async hh => {
+      if (hh) store.set('cy-household', JSON.stringify(hh)); else store.del('cy-household');
+      syncShare(hh);
+      R = enrich(RAW); location.hash = ''; route();
+    } });
 }
 
 function route() {
   if (!R) return;
   const h = location.hash.slice(1);
   if (h.startsWith('item=')) detailView(decodeURIComponent(h.slice(5)));
-  else if (h === 'settings') settingsView();
-  else if (h === 'household') householdView({ app, esc, workplaces: RAW.workplaces || [], current: loadHH(),
-    onSave: hh => { if (hh) store.set('cy-household', JSON.stringify(hh)); else store.del('cy-household'); R = enrich(RAW); location.hash = ''; route(); } });
+  else if (h === 'settings' || h === 'household') settingsView();
   else listView();
 }
 window.addEventListener('hashchange', route);

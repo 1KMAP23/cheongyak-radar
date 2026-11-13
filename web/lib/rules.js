@@ -193,8 +193,22 @@ export function overall(elig, inv, com) {
 
 // ── 나에게 맞는 순서: 적합도 점수 (100점) ───────────────────
 // 안전마진 40 + 출퇴근 30 + 입지 25(지하철 10·학군 10·규모 3·브랜드 2) + 화제성 5. 자격은 점수에 넣지 않고 태그로 표시한다.
-export function fitScore(it) {
+export const DEFAULT_WEIGHTS = { margin: 40, commute: 20, location: 35, buzz: 5 };
+/** 사용자가 정한 비율을 합 100으로 맞춘다 (빈 값·음수는 0) */
+export function normWeights(w) {
+  const k = ['margin', 'commute', 'location', 'buzz'];
+  const v = Object.fromEntries(k.map(x => [x, Math.max(0, +(w?.[x] ?? DEFAULT_WEIGHTS[x]) || 0)]));
+  const sum = k.reduce((s, x) => s + v[x], 0);
+  if (!sum) return { ...DEFAULT_WEIGHTS };
+  const out = Object.fromEntries(k.map(x => [x, Math.round(v[x] / sum * 100)]));
+  out.margin += 100 - k.reduce((s, x) => s + out[x], 0); // 반올림 오차는 안전마진에
+  return out;
+}
+export function fitScore(it, weights) {
+  const W = normWeights(weights);
   const parts = [];
+  // 각 항목을 0~1로 매긴 뒤 비율(W)을 곱한다
+  const sc = (frac, max) => Math.round(Math.max(0, Math.min(1, frac)) * max * 10) / 10;
   const inv = it.invest;
   // 59㎡·84㎡(±8㎡) 중 믿을 수 있는 평형의 가장 큰 마진 (둘 다 없는 공고는 다른 평형으로).
   // 확인 못 한 마진은 6점(마진 약 0.45억 수준): 확인된 작은 마진보다 높게 치지 않는다
@@ -204,18 +218,18 @@ export function fitScore(it) {
   const good = rows.filter(r => r.reliable !== false).sort((a, b) => b.margin - a.margin)[0];
   const m = good ? good.margin : null;
   let mv, mwhy;
-  if (!good && rows.length) { mv = 6; mwhy = `${rows.map(r => `${Math.round(r.area)}㎡ ${won(r.margin)}`).join('·')}로 나왔지만 시세 비교 신뢰도가 낮아 불확실로 처리`; }
-  else if (!good) { mv = 6; mwhy = '비교할 거래가 부족해 시세 불확실'; }
+  if (!good && rows.length) { mv = 0.15; mwhy = `${rows.map(r => `${Math.round(r.area)}㎡ ${won(r.margin)}`).join('·')}로 나왔지만 시세 비교 신뢰도가 낮아 불확실로 처리`; }
+  else if (!good) { mv = 0.15; mwhy = '비교할 거래가 부족해 시세 불확실'; }
   else {
-    mv = Math.max(0, Math.min(40, Math.round((m / 3e8) * 40)));
+    mv = m / 3e8;
     mwhy = `${Math.round(good.area)}㎡ ${m >= 0 ? '+' : ''}${won(m)} (3억 이상 만점, 0 이하 0점)${main.length ? '' : ' · 59·84㎡가 없어 다른 평형 기준'}`;
-    if (inv.repeated && mv > 20) { mv = 20; mwhy += ` · ${inv.repeated}차 반복 공급이라 절반까지만`; }
+    if (inv.repeated && mv > 0.5) { mv = 0.5; mwhy += ` · ${inv.repeated}차 반복 공급이라 절반까지만`; }
   }
-  parts.push({ k: '안전마진', v: mv, max: 40, why: mwhy });
+  parts.push({ k: '안전마진', v: sc(mv, W.margin), max: W.margin, why: mwhy });
 
   const c = it.commute?.avg;
-  const cv = c == null ? 6 : c <= 20 ? 30 : c <= 30 ? 26 : c <= 40 ? 18 : c <= 45 ? 14 : c <= 60 ? 6 : 0;
-  parts.push({ k: '출퇴근', v: cv, max: 30, why: c == null ? '경로 계산 안 됨' : `평균 ${c}분${it.commute.estimated ? '(추정)' : ''} · 20분 이내 만점` });
+  const cv = c == null ? 0.2 : c <= 20 ? 1 : c <= 30 ? 0.87 : c <= 40 ? 0.6 : c <= 45 ? 0.47 : c <= 60 ? 0.2 : 0;
+  parts.push({ k: '출퇴근', v: sc(cv, W.commute), max: W.commute, why: c == null ? '경로 계산 안 됨' : `평균 ${c}분${it.commute.estimated ? '(추정)' : ''} · 20분 이내 만점, 30분 87% · 40분 60% · 45분 47% · 60분 20%` });
 
   const loc = it.location || {};
   const st = loc.subway?.[0];
@@ -228,14 +242,15 @@ export function fitScore(it) {
   const uv = few || u == null ? 1 : u >= 1000 ? 3 : u >= 500 ? 2 : u >= 300 ? 1 : 0;
   const br = brandOf(it);
   const bv = br ? 2 : 0;
-  const lv = it.geo ? sv + ev + av + uv + bv : 5;
-  parts.push({ k: '입지', v: lv, max: 25, why: it.geo
+  // 지하철 10 · 학군 10 · 규모 3 · 브랜드 2 = 25를 기준으로 비율만큼 늘이거나 줄인다
+  const lv = it.geo ? (sv + ev + av + uv + bv) / 25 : 0.2;
+  parts.push({ k: '입지', v: sc(lv, W.location), max: W.location, why: it.geo
     ? [st ? `역 ${st.m.toLocaleString()}m ${sv}/10` : '역 없음 0/10', `학군 ${ev + av}/10 (${el ? `초교 ${el.m}m` : '초교 없음'}·학원 ${ac}곳)`, `규모 ${uv}/3${few ? ' (잔여 물량이라 판단 안 함)' : u ? ` (공급 ${u.toLocaleString()}세대)` : ''}`, `브랜드 ${bv}/2${br ? ` (${br})` : ''}`].join(' · ')
     : '위치를 못 찾아 기본점' });
 
   const bz = it.buzzLevel ?? 0;
-  parts.push({ k: 'SNS 화제', v: [0, 3, 5][bz], max: 5, why: ['언급 보통', '블로그·카페 언급 많음', '언급 매우 많음'][bz] });
-  return { total: parts.reduce((s, p) => s + p.v, 0), parts };
+  parts.push({ k: 'SNS 화제', v: sc([0, 0.6, 1][bz], W.buzz), max: W.buzz, why: ['언급 보통', '블로그·카페 언급 많음', '언급 매우 많음'][bz] });
+  return { total: Math.round(parts.reduce((s, p) => s + p.v, 0)), parts, weights: W };
 }
 
 /** 직장이 서버에 등록되지 않았을 때: 직선거리 × 1.35 ÷ 출근 시간대 평균 28km/h */

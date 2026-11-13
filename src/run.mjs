@@ -1,5 +1,6 @@
 // 매일 실행: 수집 → 분석 → dist/report.json (암호화 전 평문, dist는 커밋 안 함)
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { createHash, createCipheriv, randomBytes } from 'node:crypto';
 import { collectApplyhome } from './collect/applyhome.mjs';
 import { collectLH, crossCheck } from './collect/lh.mjs';
 import { makeKakao } from './collect/kakao.mjs';
@@ -22,10 +23,33 @@ if (!KEY || !KAKAO) { console.error('DATA_GO_KR_KEY / KAKAO_REST_KEY 필요'); p
 const WORKPLACES = JSON.parse(readFileSync('config/workplaces.json', 'utf8'));
 const household = existsSync('config/household.json') ? JSON.parse(readFileSync('config/household.json', 'utf8')) : null;
 
+// ── 앱 사용자(운영자 시트에 동의하고 보낸 사람) ──
+// 직장 주소는 공개 데이터에 넣지 않고 익명 ID로만 쓴다 (web/household.js workplaceId와 같은 방식)
+const workplaceId = a => 'w-' + createHash('sha256').update(String(a || '').replace(/\s+/g, ' ').trim()).digest('hex').slice(0, 12);
+let USERS = [];
+if (process.env.SHEET_URL && process.env.SHEET_TOKEN) {
+  try {
+    const r = await fetch(`${process.env.SHEET_URL}?token=${encodeURIComponent(process.env.SHEET_TOKEN)}`, { redirect: 'follow' });
+    const j = JSON.parse(await r.text());
+    USERS = (j.users || []).filter(u => u.settings?.shareConsent);
+  } catch (e) { console.log(`사용자 시트 읽기 실패: ${e.message}`); }
+}
+console.log(`앱 사용자: ${USERS.length}명 (알림 ${USERS.filter(u => u.push).length})`);
+
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const from = kstToday();
 const to = new Date(Date.parse(from) + 9 * 864e5).toISOString().slice(0, 10);
 const kakao = makeKakao(KAKAO);
+// 출퇴근을 계산할 직장: 공용 목록 + 사용자가 직접 넣은 주소 (최대 40곳)
+const COMMUTE_WPS = [...WORKPLACES];
+for (const u of USERS) {
+  const addr = u.settings?.prefs?.workplaceAddress;
+  if (!addr || COMMUTE_WPS.length >= 40) continue;
+  const id = workplaceId(addr);
+  if (COMMUTE_WPS.some(w => w.id === id)) continue;
+  try { const g = await kakao.geocode(addr); if (g) COMMUTE_WPS.push({ id, x: g.x, y: g.y, private: true }); } catch {}
+}
+console.log(`출퇴근 계산 직장: ${COMMUTE_WPS.length}곳 (사용자 입력 ${COMMUTE_WPS.filter(w => w.private).length})`);
 const report = { generatedAt: new Date().toISOString(), range: { from, to }, sources: {}, warnings: [], items: [] };
 
 // ── 수집 ──
@@ -59,7 +83,7 @@ for (const it of items) {
       out.location = await kakao.nearby(geo);
       // 등록된 직장마다 출퇴근 예측 (앱에서 각자 고른 직장 기준으로 점수를 다시 계산한다)
       out.commutes = {};
-      for (const wp of WORKPLACES) out.commutes[wp.id] = await kakao.commute(geo, wp);
+      for (const wp of COMMUTE_WPS) out.commutes[wp.id] = await kakao.commute(geo, wp);
       // 평형별 시세: 59㎡·84㎡에 가장 가까운 주택형을 먼저, 남으면 하나 더 (서로 다른 전용면적 최대 3개)
       const uniq = [...new Map((it.models || []).filter(m => m.exclusiveArea && m.topPrice)
         .map(m => [Math.round(m.exclusiveArea), m])).values()];
@@ -115,39 +139,53 @@ console.log(`분석 오류: ${failed.length}건${failed.length ? ` (${failed[0].
 
 // 아침 푸시 문구는 저장소 주인 세대(HOUSEHOLD_JSON) 기준. 이 판정 결과는 보고서에 넣지 않는다
 // (비밀번호를 다른 사람과 공유하면 보고서를 열 수 있으므로, 세대 정보로 만든 내용은 각 기기에서 계산한다)
-const ownerWp = household?.prefs?.workplace || WORKPLACES[0]?.id;
-const view = report.items.map(i => {
-  const v = { ...i, commute: i.commutes?.[ownerWp] || null };
-  v.eligibility = eligibility(v, household, TH);
-  v.commuteResult = commuteVerdict(v.commute);
-  v.overall = overall(v.eligibility, v.invest, v.commuteResult);
-  v.fit = fitScore(v);
-  v.eligTag = eligibilityTag(v.eligibility);
-  v.label = `(${i.place}) ${i.shortName}${v.eligTag?.icon === '❌' ? ' ❌' : ''}`;
-  return v;
-}).sort((a, b) => b.fit.total - a.fit.total);
-const count = f => view.filter(f).length;
-const pushSummary = {
-  total: view.length,
-  star: count(i => i.overall.star),
-  recommend: count(i => i.invest.verdict === '추천'),
-  conditional: count(i => i.invest.verdict === '조건부'),
-  notRecommend: count(i => i.invest.verdict === '비추천'),
-  closingToday: count(i => i.closingToday),
-  starNames: view.filter(i => i.overall.star).map(i => i.label),
-  hot: count(i => i.hot > 0),
-  hotNames: view.filter(i => i.hot > 0).sort((a, b) => (b.invest.margin || 0) - (a.invest.margin || 0)).map(i => i.label),
-  topNames: view.slice(0, 3).map(i => i.label),
-  closingTodayNames: view.filter(i => i.closingToday).map(i => i.label),
-  recommendNames: view.filter(i => i.invest.verdict === '추천').map(i => i.label),
-};
+/** 한 세대 기준 아침 알림 요약 (앱 화면과 같은 규칙: web/lib/rules.js) */
+function summarize(hh) {
+  const wpId = hh?.prefs?.workplaceId || hh?.prefs?.workplace || (hh ? null : WORKPLACES[0]?.id);
+  const regions = hh?.prefs?.regions;
+  const view = report.items.filter(i => !regions?.length || regions.some(r => (i.region || '').startsWith(r))).map(i => {
+    const v = { ...i, commute: wpId ? i.commutes?.[wpId] || null : null };
+    v.eligibility = eligibility(v, hh, TH);
+    v.commuteResult = commuteVerdict(v.commute);
+    v.overall = overall(v.eligibility, v.invest, v.commuteResult);
+    v.fit = fitScore(v, hh?.prefs?.weights);
+    v.eligTag = eligibilityTag(v.eligibility);
+    v.label = `(${i.place}) ${i.shortName}${v.eligTag?.icon === '❌' ? ' ❌' : ''}`;
+    return v;
+  }).sort((a, b) => b.fit.total - a.fit.total);
+  const count = f => view.filter(f).length;
+  return {
+    total: view.length,
+    star: count(i => i.overall.star),
+    recommend: count(i => i.invest.verdict === '추천'),
+    conditional: count(i => i.invest.verdict === '조건부'),
+    notRecommend: count(i => i.invest.verdict === '비추천'),
+    closingToday: count(i => i.closingToday),
+    starNames: view.filter(i => i.overall.star).map(i => i.label),
+    hot: count(i => i.hot > 0),
+    hotNames: view.filter(i => i.hot > 0).sort((a, b) => (b.invest.margin || 0) - (a.invest.margin || 0)).map(i => i.label),
+    topNames: view.slice(0, 3).map(i => i.label),
+    closingTodayNames: view.filter(i => i.closingToday).map(i => i.label),
+    recommendNames: view.filter(i => i.invest.verdict === '추천').map(i => i.label),
+  };
+}
+// 아침 푸시: 저장소 주인 세대(HOUSEHOLD_JSON) + 동의한 사용자 각자 기준. 이 결과는 공유 보고서에 넣지 않는다
+const pushSummary = summarize(household);
+const userPush = USERS.filter(u => u.push?.endpoint).map(u => ({ sub: u.push, summary: summarize(u.settings) }));
 report.thresholds = TH;
-report.workplaces = WORKPLACES;
+report.workplaces = WORKPLACES.map(({ id, name }) => ({ id, name })); // 사용자 직장은 commutes의 익명 ID로만 존재
 report.items.sort((a, b) => (a.window?.end || '').localeCompare(b.window?.end || ''));
 
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/report.json', JSON.stringify(report));
 writeFileSync('dist/push-summary.json', JSON.stringify({ ...pushSummary, to: report.range.to, warnings: report.warnings.length }));
+// 사용자별 알림(구독 정보 포함)은 SHEET_TOKEN으로 암호화해서 넘긴다 (작업 산출물은 공개 저장소에서 내려받을 수 있음)
+if (userPush.length) {
+  const key = createHash('sha256').update(process.env.SHEET_TOKEN).digest(), iv = randomBytes(12);
+  const c = createCipheriv('aes-256-gcm', key, iv);
+  const ct = Buffer.concat([c.update(JSON.stringify(userPush.map(u => ({ ...u, summary: { ...u.summary, warnings: report.warnings.length } })))), c.final()]);
+  writeFileSync('dist/push-users.enc', JSON.stringify({ iv: iv.toString('base64'), tag: c.getAuthTag().toString('base64'), ct: ct.toString('base64') }));
+}
 // 공개 로그에는 세대 정보가 들어가지 않게 개수만 출력
 console.log(`화제성: ${report.items.map(i => `${i.buzz?.query}=${Math.round(i.buzz?.score ?? 0)}`).join(', ')}`);
 console.log(`경쟁률: ${competitionStatus() || report.items.filter(i => i.competition?.field).map(i => `${i.buzz?.query} ${i.competition.field} ${i.competition.maxRate}`).join(', ') || '데이터 없음'}`);
