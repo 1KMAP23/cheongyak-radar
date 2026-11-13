@@ -19,6 +19,19 @@ function loadEnv() {
 }
 loadEnv();
 
+// 일시적 통신 오류(fetch failed·5xx·429)는 최대 3번 다시 시도한다
+const rawFetch = globalThis.fetch;
+globalThis.fetch = async (...args) => {
+  let last;
+  for (let i = 0; i < 4; i++) {
+    try {
+      const r = await rawFetch(...args);
+      if (r.status >= 500 || r.status === 429) { last = new Error(`HTTP ${r.status}`); if (i < 3) { await new Promise(s => setTimeout(s, 800 * 2 ** i)); continue; } }
+      return r;
+    } catch (e) { last = e; if (i < 3) await new Promise(s => setTimeout(s, 800 * 2 ** i)); }
+  }
+  throw last;
+};
 const KEY = process.env.DATA_GO_KR_KEY, KAKAO = process.env.KAKAO_REST_KEY;
 if (!KEY || !KAKAO) { console.error('DATA_GO_KR_KEY / KAKAO_REST_KEY 필요'); process.exit(1); }
 const WORKPLACES = JSON.parse(readFileSync('config/workplaces.json', 'utf8'));
@@ -74,13 +87,16 @@ const offis = items.filter(i => i.propertyType === '오피스텔');
 for (const it of items) {
   if (it.propertyType) continue;
   const twin = offis.find(o => (stem(o.name) && stem(o.name) === stem(it.name)) || (o.address && it.address && o.address.slice(0, 18) === it.address.slice(0, 18)));
+  // 참고 정보로만 남긴다 (목록에서 빼거나 태그를 달지 않음)
   if (/주상복합/.test(`${it.name} ${it.address || ''}`)) it.mixedUse = '공고명에 주상복합';
-  else if (twin) it.mixedUse = `같은 단지에서 오피스텔도 분양 (${twin.name})`;
+  else if (twin) it.mixedUse = '같은 단지에서 오피스텔도 따로 분양';
 }
 // 오피스텔·생활숙박시설·주상복합(추정)은 목록에서 뺀다. 누락 확인용으로 이름은 로그와 보고서에 남김
-const excluded = items.filter(i => i.propertyType === '오피스텔' || i.propertyType === '생활숙박시설' || i.mixedUse);
+// 청약홈 아파트 공고(APT)는 같은 단지에 오피스텔이 있어도 아파트 분양이라 절대 빼지 않는다
+const excluded = items.filter(i => i.propertyType === '오피스텔' || i.propertyType === '생활숙박시설');
 for (const x of excluded) items.splice(items.indexOf(x), 1);
-console.log(`제외(오피스텔·생숙·주상복합): ${excluded.length}건${excluded.length ? ` (${excluded.map(x => `${x.name}[${x.propertyType || '주상복합'}]`).join(', ')})` : ''}`);
+report.excluded = excluded.map(x => ({ name: x.name, type: x.propertyType }));
+console.log(`제외(오피스텔·생숙): ${excluded.length}건${excluded.length ? ` (${excluded.map(x => `${x.name}[${x.propertyType}]`).join(', ')})` : ''}`);
 
 // ── 지난 업데이트 데이터 (배포된 암호화 파일) → 새로 생긴 공고 찾기 ──
 async function previousIds() {
@@ -108,6 +124,7 @@ for (const it of items) {
       : await kakao.geocode(it.name.replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/(입주자|잔여|추가|공공분양|신혼희망|본청약).*$/, '').trim());
     out.geo = geo;
     if (scattered) out.analysisNote = '여러 단지 공가 세대를 한꺼번에 파는 공고라 단지별 목록은 공고문에서 확인하세요.';
+    else if (it.onlyLH && !(it.models || []).length) out.analysisNote = 'LH 홈페이지에만 올라온 공고라 주택형·분양가 정보가 API에 없어요. 59㎡·84㎡ 가격과 안전마진은 공고문에서 확인하세요.';
     if (geo && !geo.precise) out.analysisNote = `정확한 주소가 아니라 "${geo.query}" 기준 대략 위치로 분석했어요.`;
     if (NON_APT.has(out.category)) out.analysisNote = `${CATEGORY_LABEL[out.category]}은 아파트 실거래와 비교할 수 없어 안전마진을 계산하지 않아요.`;
     if (geo) {

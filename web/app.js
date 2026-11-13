@@ -125,7 +125,8 @@ function nextStep(it) {
 }
 function listView() {
   const W = normWeights(R.HH?.prefs?.weights);
-  const shown = FILTERS.filter(([k, , f]) => k === 'all' || k === filter || R.items.some(f));
+  const ALWAYS = new Set(['all', 'today', 'new', 'soon', 'ok', 'near']);
+  const shown = FILTERS.filter(([k, , f]) => ALWAYS.has(k) || k === filter || R.items.some(f));
   const items = R.items.filter(match);
   // 오늘 마감은 맨 위에 따로, 나머지는 적합도 순. 자격 미달도 빼지 않고 ❌ 태그로 표시
   const banners = [
@@ -150,7 +151,7 @@ const dueTag = it => it.closingToday ? '<span class="etag no">⏰ 오늘 마감<
   : it.window?.start > R.today ? `<span class="tag mono">접수 D-${dday(it.window.start)}</span>`
   : it.window?.end ? `<span class="tag mono">마감 D-${dday(it.window.end)}</span>` : '';
 /** 일반 아파트가 아니면 표시: 오피스텔·도시형생활주택·생활숙박시설·주상복합 추정 */
-const kindTag = it => NON_APT.has(it.category) ? `<span class="etag warn">${({ officetel: '🏢', urban: '🏘', lodging: '🏨' })[it.category]} ${esc(it.categoryLabel)} · 아파트 아님</span>` : it.mixedUse ? '<span class="etag warn">🏢 주상복합 추정</span>' : '';
+const kindTag = it => NON_APT.has(it.category) ? `<span class="etag warn">${({ officetel: '🏢', urban: '🏘', lodging: '🏨' })[it.category]} ${esc(it.categoryLabel)} · 아파트 아님</span>` : '';
 const isNew = it => !!it.isNew; // 지난 업데이트 이후 새로 생긴 공고 (서버에서 비교)
 const sgn = m => (m >= 0 ? '+' : '') + won(m);
 const mtone = m => (m == null ? 'plain' : m >= 2e8 ? 'good' : m >= 1e8 ? 'mid' : 'bad');
@@ -197,7 +198,6 @@ function prosCons(it) {
   const br = brandOf(it); if (br) pro.push(br);
   if (it.invest.repeated) con.push(`${it.invest.repeated}차 반복 공급`);
   if (NON_APT.has(it.category)) con.push(`${it.categoryLabel} (아파트 아님 · 시세 비교 불가)`);
-  else if (it.mixedUse) con.push('주상복합 추정 (관리비·환금성 확인)');
   if (it.buzzLevel) pro.push('SNS 언급 많음');
   if (it.competition?.maxRate >= 10) pro.push(`경쟁률 최고 ${it.competition.maxRate}:1`);
   return { pro, con };
@@ -261,7 +261,7 @@ function detailView(id) {
 
     <section class="panel"><h2>기본 정보</h2><dl class="facts">
       <div><dt>공급 유형</dt><dd>${esc(it.categoryLabel)}${it.detailType ? ` (${esc(it.detailType)})` : ''}</dd></div>
-      <div><dt>건물 유형</dt><dd>${NON_APT.has(it.category) ? `${esc(it.categoryLabel)} (아파트 아님)` : it.mixedUse ? `주상복합 추정 · ${esc(it.mixedUse)}` : '아파트'}</dd></div>
+      <div><dt>건물 유형</dt><dd>${NON_APT.has(it.category) ? `${esc(it.categoryLabel)} (아파트 아님)` : it.mixedUse ? `아파트 (${esc(it.mixedUse)})` : '아파트'}</dd></div>
       <div><dt>이번 공급</dt><dd class="mono">${it.totalUnits ? it.totalUnits.toLocaleString() + '세대' : '-'}</dd></div>
       <div><dt>접수 일정</dt><dd>${esc(schedule(it)) || '-'}</dd></div>
       <div><dt>당첨 발표</dt><dd>${esc(md(it.schedule?.winners)) || '-'}</dd></div>
