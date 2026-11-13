@@ -31,7 +31,7 @@ function enrich(raw) {
     it.commute = wp ? src.commutes?.[wp.id] || null : null;
     it.eligibility = eligibility(it, HH, raw.thresholds);
     it.commuteResult = !wp ? { verdict: '확인 필요', text: '설정에서 직장을 고르면 출퇴근 시간을 계산해요' }
-      : wp.custom && !it.commute ? { verdict: '확인 필요', text: HH.shareConsent ? '직장 등록 중 · 다음 평일 아침 분석부터 출퇴근 시간이 나와요' : '직접 입력한 직장은 설정의 운영자에게 보내기에 동의해야 출퇴근 시간을 계산해요' }
+      : wp.custom && !it.commute ? { verdict: '확인 필요', text: '직장 등록 중 · 다음 평일 아침 분석부터 출퇴근 시간이 나와요' }
       : commuteVerdict(it.commute, wp.name);
     it.overall = overall(it.eligibility, it.invest, it.commuteResult);
     it.fit = fitScore(it, weights);

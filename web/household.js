@@ -100,7 +100,7 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
       <div id="wp-custom" class="sub-grid" ${custom ? '' : 'hidden'}>
         ${fld('wp-name', '직장 이름', v(h.prefs?.workplaceName), 'text', 'maxlength="30" placeholder="예: 우리 회사"')}
         ${fld('wp-addr', '직장 주소 (도로명)', v(h.prefs?.workplaceAddress), 'text', 'maxlength="100" placeholder="예: 서울 송파구 올림픽로 300"')}
-        <p class="sub">출퇴근 시간은 서버에서 계산해서, 아래 <b>운영자에게 보내기</b>에 동의해야 다음 평일 아침부터 나와요. 앱 데이터에는 주소 대신 알아볼 수 없는 번호만 들어가요.</p>
+        <p class="sub">출퇴근 시간은 서버에서 계산해서 저장한 다음 평일 아침부터 나와요. 앱 데이터에는 주소 대신 알아볼 수 없는 번호만 들어가요.</p>
       </div>
       <div class="ck-row">${['서울', '경기', '인천'].map(r => chk(`rg-${r}`, (h.prefs?.regions || ['서울', '경기', '인천']).includes(r), `${r} 공고 보기`)).join('')}</div>
       ${money('maxp', '최대 분양가', h.prefs?.maxPrice, '넘는 단지는 💸 표시 · 비워 두면 표시 안 함')}
@@ -114,20 +114,16 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
     </section>
 
     <section class="panel"><h2>9. 매일 아침 8시 알림</h2>
-      ${push?.standalone ? `<p class="sub">평일 아침 8시에 내 추천 순위로 알림이 와요. 알림을 켜고 아래 <b>운영자에게 보내기</b>에 동의해야 받을 수 있어요.</p>
+      ${push?.standalone ? `<p class="sub">평일 아침 8시에 내 추천 순위로 알림이 와요. 알림을 켜고 저장하면 받을 수 있어요.</p>
         <p><button class="btn" id="push" type="button">${push.subscribed ? '알림 켜짐 ✓ (다시 연결)' : '알림 켜기'}</button></p><div class="err" id="perr"></div>`
       : `<p class="sub">아이폰 알림은 홈 화면에 추가한 앱에서만 켤 수 있어요. Safari 아래쪽 공유 버튼 → <b>홈 화면에 추가</b> → 홈 화면 아이콘으로 다시 열어 주세요.</p>`}
     </section>
 
-    ${canShare ? `<section class="panel"><h2>10. 운영자에게 보내기</h2>
-      ${chk('share', !!h.shareConsent, '위 설정을 앱 운영자에게 보내는 데 동의해요', '동의하지 않으면 모든 정보가 이 기기에만 남아요')}
-      <details><summary>보내는 내용과 이유</summary><p class="sub" style="margin-top:6px">
-        <b>보내는 것:</b> 이 화면의 모든 입력값(생년월일·세대주·결혼·자녀·소득·자산·차량·청약통장·직장 주소·점수 비율), 알림 수신 정보, 이름(입력한 경우).<br>
-        <b>왜:</b> 직장까지 출퇴근 시간 계산, 내 기준 아침 알림 발송, 앱 개선.<br>
-        <b>누가 봐요:</b> 앱 운영자 한 명(구글 시트). 다른 사용자에게는 보이지 않아요.<br>
-        <b>그만두기:</b> 체크를 끄고 저장하거나 '입력값 지우기'를 누르면 운영자 시트에서도 지워요.</p></details>
-    </section>` : ''}
-
+    ${canShare ? `<section class="panel notice"><h2>저장하면 운영자에게도 전송돼요</h2><p class="sub">
+        <b>보내는 것:</b> 이 화면의 입력값(생년월일·세대주·결혼·자녀·소득·자산·차량·청약통장·직장 주소·점수 비율), 알림 수신 정보, 이름.<br>
+        <b>왜:</b> 직장까지 출퇴근 계산, 내 기준 아침 알림, 앱 개선. <b>보는 사람:</b> 앱 운영자 한 명(다른 사용자에겐 안 보여요).<br>
+        <b>그만두기:</b> '입력값 지우기'를 누르면 운영자 쪽에서도 지워져요.</p></section>` : ''}
+    <div class="banner warn" id="agree" hidden><b>처음 한 번만 확인할게요.</b><br>저장한 내용은 위 안내대로 운영자에게 전송돼요.<div class="actions" style="margin-top:8px"><button class="primary" id="agree-ok" type="button">동의하고 저장</button><button id="agree-no" type="button">취소</button></div></div>
     <div class="err" id="hh-err"></div>
     <div class="actions"><button class="primary" id="save">저장하고 목록 보기</button><button id="reset">입력값 지우기</button></div>
 
@@ -152,8 +148,10 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
   WK.forEach(([k]) => ($(`w-${k}`).oninput = sumW)); sumW();
   $('w-reset').onclick = () => { WK.forEach(([k]) => ($(`w-${k}`).value = DEFAULT_WEIGHTS[k])); sumW(); };
   $('forget').onclick = () => onForget?.();
+  if ($('agree-ok')) $('agree-ok').onclick = () => { try { localStorage.setItem('cy-agreed', '1'); } catch {} $('agree').hidden = true; $('save').click(); };
+  if ($('agree-no')) $('agree-no').onclick = () => { $('agree').hidden = true; };
   if ($('push')) $('push').onclick = async () => {
-    try { await push.subscribe(); $('push').textContent = '알림 켜짐 ✓'; $('perr').textContent = canShare && !$('share')?.checked ? '알림을 받으려면 아래 운영자에게 보내기에 동의하고 저장해 주세요.' : '저장하면 다음 평일 아침부터 와요.'; }
+    try { await push.subscribe(); $('push').textContent = '알림 켜짐 ✓'; $('perr').textContent = '저장하면 다음 평일 아침부터 와요.'; }
     catch (e) { $('perr').textContent = e.message; }
   };
   const num = id => { const x = $(id)?.value; return x === '' || x == null ? null : +x; };
@@ -199,14 +197,17 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
         weights: normWeights(Object.fromEntries(WK.map(([k]) => [k, num(`w-${k}`) ?? 0]))),
       },
       nickname: $('nick').value.trim() || null,
-      shareConsent: !!$('share')?.checked,
+      shareConsent: !!canShare,
     };
   }
 
   // 화면에 없는 값(배우자 통장 등)은 기존 값을 지킨다
   const merged = () => { const o = collect(), c = current || {};
     return { ...c, ...o, incomeTaxYears: { ...c.incomeTaxYears, ...o.incomeTaxYears }, accounts: { ...c.accounts, ...o.accounts }, prefs: { ...c.prefs, ...o.prefs } }; };
+  const agreed = () => { try { return localStorage.getItem('cy-agreed') === '1'; } catch { return false; } };
   $('save').onclick = async () => {
+    // 운영자 전송 안내를 처음 한 번만 확인받는다 (동의 기록은 이 기기에 남김)
+    if (canShare && !agreed()) { $('agree').hidden = false; $('agree').scrollIntoView({ block: 'center' }); return; }
     const out = merged();
     if (out.prefs.workplaceAddress) out.prefs.workplaceId = await workplaceId(out.prefs.workplaceAddress);
     else delete out.prefs.workplaceId;
