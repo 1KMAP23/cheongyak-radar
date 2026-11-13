@@ -196,16 +196,19 @@ export function overall(elig, inv, com) {
 export function fitScore(it) {
   const parts = [];
   const inv = it.invest;
-  // 59㎡·84㎡(±8㎡) 중 믿을 수 있는 평형의 가장 큰 마진. 없으면 시세 불확실(12점 = 마진 약 0.9억 수준의 중간값)
-  const rows = (it.market || []).filter(r => r.margin != null && (Math.abs(r.area - 59) <= 8 || Math.abs(r.area - 84) <= 8));
+  // 59㎡·84㎡(±8㎡) 중 믿을 수 있는 평형의 가장 큰 마진 (둘 다 없는 공고는 다른 평형으로).
+  // 확인 못 한 마진은 6점(마진 약 0.45억 수준): 확인된 작은 마진보다 높게 치지 않는다
+  const all = (it.market || []).filter(r => r.margin != null);
+  const main = all.filter(r => Math.abs(r.area - 59) <= 8 || Math.abs(r.area - 84) <= 8);
+  const rows = main.length ? main : all;
   const good = rows.filter(r => r.reliable !== false).sort((a, b) => b.margin - a.margin)[0];
   const m = good ? good.margin : null;
   let mv, mwhy;
-  if (!good && rows.length) { mv = 12; mwhy = `${rows.map(r => `${Math.round(r.area)}㎡ ${won(r.margin)}`).join('·')}로 나왔지만 시세 비교 신뢰도가 낮아 불확실로 처리`; }
-  else if (!good) { mv = 12; mwhy = '비교할 거래가 부족해 시세 불확실'; }
+  if (!good && rows.length) { mv = 6; mwhy = `${rows.map(r => `${Math.round(r.area)}㎡ ${won(r.margin)}`).join('·')}로 나왔지만 시세 비교 신뢰도가 낮아 불확실로 처리`; }
+  else if (!good) { mv = 6; mwhy = '비교할 거래가 부족해 시세 불확실'; }
   else {
     mv = Math.max(0, Math.min(40, Math.round((m / 3e8) * 40)));
-    mwhy = `${Math.round(good.area)}㎡ ${m >= 0 ? '+' : ''}${won(m)} (3억 이상 만점, 0 이하 0점)`;
+    mwhy = `${Math.round(good.area)}㎡ ${m >= 0 ? '+' : ''}${won(m)} (3억 이상 만점, 0 이하 0점)${main.length ? '' : ' · 59·84㎡가 없어 다른 평형 기준'}`;
     if (inv.repeated && mv > 20) { mv = 20; mwhy += ` · ${inv.repeated}차 반복 공급이라 절반까지만`; }
   }
   parts.push({ k: '안전마진', v: mv, max: 40, why: mwhy });
