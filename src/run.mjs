@@ -125,7 +125,7 @@ const view = report.items.map(i => {
   v.eligTag = eligibilityTag(v.eligibility);
   v.label = `(${i.place}) ${i.shortName}${v.eligTag?.icon === '❌' ? ' ❌' : ''}`;
   return v;
-}).sort((a, b) => (b.overall.star - a.overall.star) || (b.fit.total - a.fit.total));
+}).sort((a, b) => b.fit.total - a.fit.total);
 const count = f => view.filter(f).length;
 const pushSummary = {
   total: view.length,

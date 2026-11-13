@@ -165,3 +165,5 @@ details summary{cursor:pointer;margin-top:10px;color:var(--accent);font-size:.88
 .size.bad{border-color:transparent;background:var(--bad-soft)}.size.bad .m dd{color:var(--bad)}
 .size.none{opacity:.6}
 .kpis.two{grid-template-columns:1fr 1fr}
+.rk{flex-shrink:0;min-width:1.6em;height:1.6em;border-radius:50%;display:inline-grid;place-items:center;font-size:.78rem;background:var(--bg);color:var(--muted);margin-right:6px;align-self:flex-start}
+.rk.top{background:var(--accent);color:var(--surface)}

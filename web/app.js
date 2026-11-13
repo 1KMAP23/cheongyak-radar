@@ -35,7 +35,9 @@ function enrich(raw) {
     it.overBudget = HH?.prefs?.maxPrice && isFinite(minPrice) && minPrice > HH.prefs.maxPrice;
     items.push(it);
   }
-  items.sort((a, b) => (b.overall.star - a.overall.star) || (b.fit.total - a.fit.total) || (a.window?.end || '').localeCompare(b.window?.end || ''));
+  // 추천 점수(적합도) 순. 동점이면 마감이 빠른 순
+  items.sort((a, b) => (b.fit.total - a.fit.total) || (a.window?.end || '').localeCompare(b.window?.end || ''));
+  items.forEach((it, i) => (it.rank = i + 1));
   const count = f => items.filter(f).length;
   const stale = Date.now() - Date.parse(raw.generatedAt) > 20 * 3600e3;
   return { ...raw, items, HH, wp, hidden, ended, today, stale,
@@ -94,6 +96,7 @@ const areaRange = it => { const a = (it.models || []).map(m => Math.round(m.excl
 // ── 목록 ──
 const FILTERS = [
   ['all', '전체', () => true],
+  ['today', '⏰ 오늘 마감', it => it.closingToday],
   ['ok', '자격 됨', it => it.eligibility.status !== '불가'],
   ['near', '🚗 45분 이내', it => it.commuteResult.verdict === '가능' || it.commuteResult.verdict === '애매'],
   ['rec', '투자 추천', it => it.invest.verdict === '추천'],
@@ -113,9 +116,6 @@ function listView() {
   const shown = FILTERS.filter(([k, , f]) => k === 'all' || k === filter || R.items.some(f));
   const items = R.items.filter(match);
   // 오늘 마감은 맨 위에 따로, 나머지는 적합도 순. 자격 미달도 빼지 않고 ❌ 태그로 표시
-  const today = items.filter(i => i.closingToday);
-  const rest = items.filter(i => !today.includes(i));
-  const hot = R.items.filter(i => i.hot > 0).sort((a, b) => (b.invest.margin || 0) - (a.invest.margin || 0)).slice(0, 6);
   const banners = [
     R.warnings.length && `<div class="banner warn">⚠️ ${R.warnings.map(esc).join('<br>')}</div>`,
     R.stale && `<div class="banner warn">마지막 분석이 ${new Date(R.generatedAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}이에요. 주말·공휴일엔 갱신이 없어요. 접수 끝난 공고 ${R.ended}건은 뺐어요.</div>`,
@@ -126,10 +126,8 @@ function listView() {
       <span class="topbtns"><a class="btn" href="#household" aria-label="우리 집 정보">🏠</a><a class="btn" href="#settings" aria-label="설정">⚙︎</a></span></div>
     ${banners}
     <div class="chips scroll" role="group" aria-label="필터">${shown.map(([k, l, f]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l} <b class="mono">${R.items.filter(f).length}</b></button>`).join('')}</div>
-    ${today.length ? `<h2 class="sec">⏰ 오늘 마감 <span class="sub">${today.length}건</span></h2><div class="list">${today.map(card).join('')}</div>` : ''}
-    ${hot.length && filter === 'all' ? `<h2 class="sec">🔥 핫한 청약 <span class="sub">주변 시세보다 2억 이상 싼 곳</span></h2><div class="hotrow">${hot.map(hotCard).join('')}</div>` : ''}
-    <h2 class="sec">👍 나에게 맞는 순 <span class="sub">마진 40 · 출퇴근 30 · 입지 25 · SNS 5</span></h2>
-    <div class="list">${rest.length ? rest.map(card).join('') : '<p class="sub">조건에 맞는 공고가 없어요.</p>'}</div>
+    <h2 class="sec">👍 추천 순위 <span class="sub">마진 40 · 출퇴근 30 · 입지 25 · SNS 5</span></h2>
+    <div class="list">${items.length ? items.map(card).join('') : '<p class="sub">조건에 맞는 공고가 없어요.</p>'}</div>
     <p class="sub">청약홈 ${R.sources?.applyhome?.ok === false ? '수집 실패' : '전체'} + LH 단독 공고 ${R.crossCheck?.onlyLH?.length ?? 0}건 포함${R.hidden ? ` · 관심 지역 밖 ${R.hidden}건 숨김` : ''}.<br>투자 자문이 아닌 참고 자료예요. 자격·금액은 반드시 공고문 원문으로 확인하세요.</p>
   </div>`;
   app.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => { filter = b.dataset.f; store.set('cy-filter', filter); listView(); }));
@@ -150,11 +148,11 @@ const tone = v => ({ 추천: 'good', 가능: 'good', 조건부: 'mid', 애매: '
 function card(it) {
   const m = it.invest.margin, c = it.commute?.avg, unsure = it.invest.marginReliable === false;
   return `<a class="card" href="#item=${encodeURIComponent(it.id)}">
-    <div class="row"><span class="nm">${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</span>${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</div>
+    <div class="row"><span class="rk mono${it.rank <= 3 ? ' top' : ''}">${it.rank}</span><span class="nm">${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</span>${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</div>
     ${it.overall.star || it.eligTag || it.overBudget ? `<div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${etag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
     <div class="stats">${sizeBox(it, 59)}${sizeBox(it, 84)}<span class="st ${tone(it.commuteResult.verdict)}"><small>🚗 출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span></div>
     ${it.hotWhy ? `<div class="hotwhy">🔥 ${esc(it.hotWhy)}</div>` : unsure ? '<div class="hotwhy muted">주변 시세가 이상하게 나와 마진은 참고만 하세요</div>' : ''}
-    <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${it.closingToday ? '' : dueTag(it)}<span>${esc(nextStep(it))}</span></div>
+    <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${dueTag(it)}<span>${esc(nextStep(it))}</span></div>
   </a>`;
 }
 
