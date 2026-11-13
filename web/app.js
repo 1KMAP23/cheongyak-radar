@@ -106,6 +106,8 @@ const areaRange = it => { const a = (it.models || []).map(m => Math.round(m.excl
 const FILTERS = [
   ['all', '전체', () => true],
   ['today', '⏰ 오늘 마감', it => it.closingToday],
+  ['new', '📢 새 공고', it => isNew(it)],
+  ['soon', '📅 접수 예정', it => it.window?.start > R.today],
   ['ok', '자격 됨', it => it.eligibility.status !== '불가'],
   ['near', '🚗 45분 이내', it => it.commuteResult.verdict === '가능' || it.commuteResult.verdict === '애매'],
   ['rec', '투자 추천', it => it.invest.verdict === '추천'],
@@ -143,7 +145,11 @@ function listView() {
   app.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => { filter = b.dataset.f; store.set('cy-filter', filter); listView(); }));
 }
 const etag = it => it.eligTag ? `<span class="etag ${it.eligTag.icon === '❌' ? 'no' : 'warn'}">${it.eligTag.icon} ${esc(it.eligTag.text)}${it.eligTag.why ? `<small> (${esc(it.eligTag.why)})</small>` : ''}</span>` : '';
-const dueTag = it => it.closingToday ? '<span class="etag no">⏰ 오늘 마감</span>' : it.window?.end ? `<span class="tag mono">D-${Math.round((Date.parse(it.window.end) - Date.parse(R.today)) / 864e5)}</span>` : '';
+const dday = d => Math.round((Date.parse(d) - Date.parse(R.today)) / 864e5);
+const dueTag = it => it.closingToday ? '<span class="etag no">⏰ 오늘 마감</span>'
+  : it.window?.start > R.today ? `<span class="tag mono">접수 D-${dday(it.window.start)}</span>`
+  : it.window?.end ? `<span class="tag mono">마감 D-${dday(it.window.end)}</span>` : '';
+const isNew = it => it.noticeDate && dday(it.noticeDate) >= -7;
 const sgn = m => (m >= 0 ? '+' : '') + won(m);
 const mtone = m => (m == null ? 'plain' : m >= 2e8 ? 'good' : m >= 1e8 ? 'mid' : 'bad');
 /** 59㎡·84㎡ 칸: 분양가(최고가)와 안전마진 */
@@ -158,7 +164,7 @@ const tone = v => ({ 추천: 'good', 가능: 'good', 조건부: 'mid', 애매: '
 function card(it) {
   const m = it.invest.margin, c = it.commute?.avg, unsure = it.invest.marginReliable === false;
   return `<a class="card" href="#item=${encodeURIComponent(it.id)}">
-    <div class="row"><span class="rk mono${it.rank <= 3 ? ' top' : ''}">${it.rank}</span><span class="nm">${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</span>${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</div>
+    <div class="row"><span class="rk mono${it.rank <= 3 ? ' top' : ''}">${it.rank}</span><span class="nm">${isNew(it) ? '<span class="newb">NEW</span> ' : ''}${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</span>${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</div>
     ${it.overall.star || it.eligTag || it.overBudget ? `<div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${etag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
     <div class="stats">${sizeBox(it, 59)}${sizeBox(it, 84)}<span class="st ${tone(it.commuteResult.verdict)}"><small>🚗 출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span></div>
     ${it.hotWhy ? `<div class="hotwhy">🔥 ${esc(it.hotWhy)}</div>` : unsure ? '<div class="hotwhy muted">주변 시세가 이상하게 나와 마진은 참고만 하세요</div>' : ''}
@@ -272,7 +278,7 @@ function detailView(id) {
   window.scrollTo(0, 0);
 }
 
-// ── 운영자 시트로 보내기 (동의한 사람만) ──
+// ── 서버(구글 시트)와 동기화: 직장·알림·점수 비율만 ──
 let CONFIG = {};
 const uid = () => { let u = store.get('cy-uid'); if (!u) { u = (crypto.randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36)).toLowerCase(); store.set('cy-uid', u); } return u; };
 async function share(body) {
@@ -280,9 +286,15 @@ async function share(body) {
   // 구글 Apps Script는 CORS 응답을 주지 않아서 no-cors로 보낸다 (응답은 못 읽지만 저장은 된다)
   try { await fetch(CONFIG.sheetUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ uid: uid(), ...body }) }); } catch {}
 }
+// 우리 집 정보(소득·자산·생년월일 등)는 보내지 않는다. 서버가 쓰는 것만: 직장(출퇴근 계산), 알림 구독, 점수 비율·지역(아침 알림 순위)
 async function syncShare(hh) {
   const push = (() => { try { return JSON.parse(store.get('cy-push') || 'null'); } catch { return null; } })();
-  if (hh?.shareConsent) { await share({ settings: hh, push }); store.set('cy-shared', '1'); }
+  const p = hh?.prefs || {};
+  const needed = p.workplaceAddress || push;
+  if (hh?.shareConsent && needed) {
+    await share({ settings: { shareConsent: true, prefs: { workplace: p.workplace || null, workplaceId: p.workplaceId || null, workplaceAddress: p.workplaceAddress || null, regions: p.regions, weights: p.weights } }, push });
+    store.set('cy-shared', '1');
+  }
   else if (store.get('cy-shared')) { await share({ delete: true }); store.del('cy-shared'); }
 }
 const pushHelper = () => ({

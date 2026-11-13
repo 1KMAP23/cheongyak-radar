@@ -3,7 +3,9 @@ on:
   schedule:
     # 평일(월~금) 06:40 한국시간에 시작. GitHub 예약은 늦게 시작할 때가 많아서 일찍 돌리고,
     # 알림은 아래 push 단계에서 정확히 08:00까지 기다렸다가 보낸다. (UTC 일~목 21:40 = 한국 월~금 06:40)
-    - cron: '40 21 * * 0-4'
+    - cron: '40 21 * * 0-4'   # 06:40 KST 수집 → 08:00 알림
+    - cron: '0 3 * * 1-5'     # 12:00 KST 데이터만 갱신
+    - cron: '0 9 * * 1-5'     # 18:00 KST 데이터만 갱신
   workflow_dispatch:
   push:
     branches: [main]
@@ -55,7 +57,7 @@ jobs:
         uses: actions/deploy-pages@v4
   push:
     needs: deploy
-    if: github.event_name != 'push'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '40 21 * * 0-4')
     runs-on: ubuntu-latest
     timeout-minutes: 200
     steps:

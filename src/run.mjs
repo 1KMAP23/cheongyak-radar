@@ -140,15 +140,16 @@ console.log(`분석 오류: ${failed.length}건${failed.length ? ` (${failed[0].
 // 아침 푸시 문구는 저장소 주인 세대(HOUSEHOLD_JSON) 기준. 이 판정 결과는 보고서에 넣지 않는다
 // (비밀번호를 다른 사람과 공유하면 보고서를 열 수 있으므로, 세대 정보로 만든 내용은 각 기기에서 계산한다)
 /** 한 세대 기준 아침 알림 요약 (앱 화면과 같은 규칙: web/lib/rules.js) */
-function summarize(hh) {
-  const wpId = hh?.prefs?.workplaceId || hh?.prefs?.workplace || (hh ? null : WORKPLACES[0]?.id);
-  const regions = hh?.prefs?.regions;
+// hh: 세대 정보(주인만 있음, 앱 사용자는 null) · prefs: 직장·지역·점수 비율
+function summarize(hh, prefs = hh?.prefs) {
+  const wpId = prefs?.workplaceId || prefs?.workplace || (prefs ? null : WORKPLACES[0]?.id);
+  const regions = prefs?.regions;
   const view = report.items.filter(i => !regions?.length || regions.some(r => (i.region || '').startsWith(r))).map(i => {
     const v = { ...i, commute: wpId ? i.commutes?.[wpId] || null : null };
     v.eligibility = eligibility(v, hh, TH);
     v.commuteResult = commuteVerdict(v.commute);
     v.overall = overall(v.eligibility, v.invest, v.commuteResult);
-    v.fit = fitScore(v, hh?.prefs?.weights);
+    v.fit = fitScore(v, prefs?.weights);
     v.eligTag = eligibilityTag(v.eligibility);
     v.label = `(${i.place}) ${i.shortName}${v.eligTag?.icon === '❌' ? ' ❌' : ''}`;
     return v;
@@ -171,7 +172,7 @@ function summarize(hh) {
 }
 // 아침 푸시: 저장소 주인 세대(HOUSEHOLD_JSON) + 동의한 사용자 각자 기준. 이 결과는 공유 보고서에 넣지 않는다
 const pushSummary = summarize(household);
-const userPush = USERS.filter(u => u.push?.endpoint).map(u => ({ sub: u.push, summary: summarize(u.settings) }));
+const userPush = USERS.filter(u => u.push?.endpoint).map(u => ({ sub: u.push, summary: summarize(null, u.settings?.prefs || {}) }));
 report.thresholds = TH;
 report.workplaces = WORKPLACES.map(({ id, name }) => ({ id, name })); // 사용자 직장은 commutes의 익명 ID로만 존재
 report.items.sort((a, b) => (a.window?.end || '').localeCompare(b.window?.end || ''));

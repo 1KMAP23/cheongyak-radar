@@ -1,5 +1,5 @@
-// 설정 화면 하나: 우리 집 정보 + 직장 + 추천 점수 비율 + 알림 + 운영자에게 보내기 동의 + 이 기기
-// 기본은 이 기기에만 저장. '운영자에게 보내기'에 동의한 사람만 설정이 운영자 구글 시트로 간다.
+// 설정 화면 하나: 우리 집 정보 + 직장 + 추천 점수 비율 + 알림 + 이 기기
+// 우리 집 정보는 이 기기에만 저장. 서버에는 출퇴근 계산·아침 알림에 필요한 것(직장 주소·알림 정보·점수 비율·지역)만 보낸다.
 import { DEFAULT_WEIGHTS, normWeights } from './lib/rules.js';
 const MAN = 1e4; // 입력은 만원 단위
 const WK = [['margin', '안전마진'], ['commute', '출퇴근'], ['location', '입지 (지하철·학군·규모·브랜드)'], ['buzz', 'SNS 화제']];
@@ -40,9 +40,6 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
     <a class="btn back" href="#">← 목록</a>
     <div><h1>설정</h1><p class="sub">우리 집 정보를 넣으면 자격(❌·⚠️)과 추천 순위가 우리 집 기준으로 바뀌어요. 모르는 칸은 비워 두면 그 항목만 '확인 필요'로 나와요.</p></div>
 
-    <section class="panel"><h2>이름 <span class="sub">선택</span></h2>
-      ${fld('nick', '운영자가 알아볼 수 있는 이름 (별명 가능)', v(h.nickname), 'text', 'maxlength="30" placeholder="예: 민수네"')}
-    </section>
 
     <section class="panel"><h2>1. 신청자와 세대</h2>
       <p class="sub">청약을 넣을 사람(신청자) 기준으로 적어요. 부부라면 보통 세대주가 신청자예요.</p>
@@ -119,11 +116,6 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
       : `<p class="sub">아이폰 알림은 홈 화면에 추가한 앱에서만 켤 수 있어요. Safari 아래쪽 공유 버튼 → <b>홈 화면에 추가</b> → 홈 화면 아이콘으로 다시 열어 주세요.</p>`}
     </section>
 
-    ${canShare ? `<section class="panel notice"><h2>저장하면 운영자에게도 전송돼요</h2><p class="sub">
-        <b>보내는 것:</b> 이 화면의 입력값(생년월일·세대주·결혼·자녀·소득·자산·차량·청약통장·직장 주소·점수 비율), 알림 수신 정보, 이름.<br>
-        <b>왜:</b> 직장까지 출퇴근 계산, 내 기준 아침 알림, 앱 개선. <b>보는 사람:</b> 앱 운영자 한 명(다른 사용자에겐 안 보여요).<br>
-        <b>그만두기:</b> '입력값 지우기'를 누르면 운영자 쪽에서도 지워져요.</p></section>` : ''}
-    <div class="banner warn" id="agree" hidden><b>처음 한 번만 확인할게요.</b><br>저장한 내용은 위 안내대로 운영자에게 전송돼요.<div class="actions" style="margin-top:8px"><button class="primary" id="agree-ok" type="button">동의하고 저장</button><button id="agree-no" type="button">취소</button></div></div>
     <div class="err" id="hh-err"></div>
     <div class="actions"><button class="primary" id="save">저장하고 목록 보기</button><button id="reset">입력값 지우기</button></div>
 
@@ -148,8 +140,7 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
   WK.forEach(([k]) => ($(`w-${k}`).oninput = sumW)); sumW();
   $('w-reset').onclick = () => { WK.forEach(([k]) => ($(`w-${k}`).value = DEFAULT_WEIGHTS[k])); sumW(); };
   $('forget').onclick = () => onForget?.();
-  if ($('agree-ok')) $('agree-ok').onclick = () => { try { localStorage.setItem('cy-agreed', '1'); } catch {} $('agree').hidden = true; $('save').click(); };
-  if ($('agree-no')) $('agree-no').onclick = () => { $('agree').hidden = true; };
+
   if ($('push')) $('push').onclick = async () => {
     try { await push.subscribe(); $('push').textContent = '알림 켜짐 ✓'; $('perr').textContent = '저장하면 다음 평일 아침부터 와요.'; }
     catch (e) { $('perr').textContent = e.message; }
@@ -196,7 +187,6 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
         regions: ['서울', '경기', '인천'].filter(r => $(`rg-${r}`).checked), maxPrice: won('maxp'),
         weights: normWeights(Object.fromEntries(WK.map(([k]) => [k, num(`w-${k}`) ?? 0]))),
       },
-      nickname: $('nick').value.trim() || null,
       shareConsent: !!canShare,
     };
   }
@@ -204,10 +194,7 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
   // 화면에 없는 값(배우자 통장 등)은 기존 값을 지킨다
   const merged = () => { const o = collect(), c = current || {};
     return { ...c, ...o, incomeTaxYears: { ...c.incomeTaxYears, ...o.incomeTaxYears }, accounts: { ...c.accounts, ...o.accounts }, prefs: { ...c.prefs, ...o.prefs } }; };
-  const agreed = () => { try { return localStorage.getItem('cy-agreed') === '1'; } catch { return false; } };
   $('save').onclick = async () => {
-    // 운영자 전송 안내를 처음 한 번만 확인받는다 (동의 기록은 이 기기에 남김)
-    if (canShare && !agreed()) { $('agree').hidden = false; $('agree').scrollIntoView({ block: 'center' }); return; }
     const out = merged();
     if (out.prefs.workplaceAddress) out.prefs.workplaceId = await workplaceId(out.prefs.workplaceAddress);
     else delete out.prefs.workplaceId;

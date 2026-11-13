@@ -47,7 +47,7 @@ function windowOf(row) {
 }
 
 /**
- * 공고일이 since 이후이거나 접수기간이 [from, to]와 겹치는 수도권 공고를 전부 가져온다.
+ * 공고일이 since 이후이고 접수가 아직 안 끝난(끝나는 날 ≥ from) 수도권 공고를 전부 가져온다. to는 쓰지 않는다.
  * since는 넉넉하게(기본 60일 전) 잡아서 공고는 오래전에 났지만 접수가 이번 주인 건도 놓치지 않는다.
  */
 export async function collectApplyhome({ key, from, to, sinceDays = 60, log = console.log }) {
@@ -62,7 +62,8 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
       if (!METRO.has(row.SUBSCRPT_AREA_CODE_NM)) continue;
       if (kind === 'opt' && row.HOUSE_SECD_NM !== '임의공급') continue;
       const w = windowOf(row);
-      if (!w.end || w.end < from || (w.start && w.start > to)) continue;
+      // 접수가 끝나지 않은 공고는 전부 (오늘 새로 나와서 접수가 2~3주 뒤인 공고도 포함)
+      if (!w.end || w.end < from) continue;
       items.push({
         source: 'applyhome', kind,
         id: `${row.HOUSE_MANAGE_NO}-${row.PBLANC_NO}`,
