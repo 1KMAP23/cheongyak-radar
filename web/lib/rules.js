@@ -402,5 +402,5 @@ export function sizeInfo(it, target) {
   const near = ms.length ? Math.min(...ms.map(m => Math.abs(m.exclusiveArea - target))) : null;
   const same = ms.filter(m => Math.abs(m.exclusiveArea - target) === near);
   const lo = same.length ? Math.min(...same.map(m => m.topPrice)) : row.price, hi = same.length ? Math.max(...same.map(m => m.topPrice)) : row.price;
-  return { area: row?.area ?? Math.round(same[0].exclusiveArea * 10) / 10, lo, hi, margin: row?.margin ?? null, estimate: row?.comp?.estimate ?? null, reliable: row ? row.reliable !== false : true, method: row?.comp?.method };
+  return { area: row?.area ?? Math.round(same[0].exclusiveArea * 10) / 10, lo, hi, margin: row?.margin ?? null, estimate: row?.comp?.estimate ?? null, reliable: row ? row.reliable !== false : true, method: row?.comp?.method, thin: row?.comp?.status === '거래 부족' };
 }

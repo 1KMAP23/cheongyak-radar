@@ -51,7 +51,8 @@ export function invest(it, { models, location, market }) {
     if (best.comp.method) add('비교 방법', `${best.comp.method}${best.comp.method === '같은 단지 실거래' ? ' (분양권·매매, 가장 정확)' : ''} · 단지 간 ㎡당 가격 차이 ${best.comp.spread}배`, best.comp.method === '같은 단지 실거래' ? 'good' : 'mid');
     if (best.comp.reliable === false && !(ratio > 1.6 || ratio < 0.6)) {
       unreliable = true;
-      add('시세 편차', `비교 단지끼리 ㎡당 가격이 ${best.comp.spread}배 차이 → 급지가 다른 단지가 섞였을 수 있어 마진 신뢰도 낮음`, 'bad');
+      if (best.comp.thinReason) add('시세 신뢰도', best.comp.thinReason, 'bad');
+      else add('시세 편차', `비교 단지끼리 ㎡당 가격이 ${best.comp.spread}배 차이 → 급지가 다른 단지가 섞였을 수 있어 마진 신뢰도 낮음`, 'bad');
       if (verdict === '추천') verdict = '조건부';
     }
     if (ratio > 1.6 || ratio < 0.6) {

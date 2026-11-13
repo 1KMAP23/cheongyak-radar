@@ -116,10 +116,14 @@ export async function comparables({ key, kakao, point, lawd, area, months = 6, n
   const ppm = median(ppms);
   const spread = ppms.length > 1 ? Math.max(...ppms) / Math.min(...ppms) : 1;
   const radius = Math.max(...use.map(g => g.m));
-  const reliable = spread <= 1.7 && (use.length >= 2 || method === '같은 단지 실거래') && trades.length >= 3 && (method !== '다른 평형과 같은 비교 단지' || preferReliable);
+  // 거래가 너무 적으면 믿지 않는다: 같은 단지가 아니면 5건 이상, 그리고 2건 이상 거래된 단지가 2곳 이상
+  const solidCount = use.filter(g => g.trades.length >= 2).length;
+  const thin = method !== '같은 단지 실거래' && (trades.length < 5 || solidCount < 2);
+  const reliable = !thin && spread <= 1.7 && (use.length >= 2 || method === '같은 단지 실거래') && trades.length >= 3 && (method !== '다른 평형과 같은 비교 단지' || preferReliable);
   return {
-    status: !reliable ? '편차 큼' : trades.length >= 5 ? '확인' : '표본 적음',
+    status: thin ? '거래 부족' : !reliable ? '편차 큼' : '확인',
     reliable, method, spread: +spread.toFixed(2),
+    thinReason: thin ? (newTown ? '신도시·택지지구라 주변에 비교할 새 아파트 거래가 거의 없어요. 아직 지어지는 중인 신도시 가치는 실거래로 잴 수 없어 마진을 믿기 어려워요' : `비교 거래가 ${trades.length}건뿐이라 마진을 믿기 어려워요`) : null,
     radius: Math.ceil(radius / 100) * 100, sample: trades.length, months, newTown, maxAge, lawds: lawds.length,
     estimate: Math.round((ppm * area) / 1e6) * 1e6,
     perPyeong: Math.round(ppm * 3.3058),
