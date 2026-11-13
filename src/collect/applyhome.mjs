@@ -65,7 +65,8 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
     const types = {};
     for (const row of rows) {
       if (!METRO.has(row.SUBSCRPT_AREA_CODE_NM) && !/^(서울|경기|인천)/.test(row.HSSPLY_ADRES || '')) continue;
-      const t = String(row.HOUSE_SECD_NM || '');
+      // urbty는 HOUSE_SECD_NM이 '도시형/오피스텔/생활숙박시설/민간임대' 묶음이라 세부 유형(HOUSE_DTL_SECD_NM)을 본다
+      const t = String((kind === 'urbty' ? row.HOUSE_DTL_SECD_NM : row.HOUSE_SECD_NM) || '');
       if (kind === 'opt' || kind === 'urbty') types[t] = (types[t] || 0) + 1;
       // 아파트가 아닌 상품: 오피스텔 / 도시형생활주택 / 생활숙박시설. 민간임대·공공지원임대는 분양이 아니라 제외
       const propertyType = kind === 'apt' || kind === 'remndr' ? null : /오피스텔/.test(t) ? '오피스텔' : /도시형/.test(t) ? '도시형생활주택' : /생활숙박|생숙/.test(t) ? '생활숙박시설' : null;
@@ -116,7 +117,6 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
     }
     stats[kind] = { fetched: rows.length, total, kept, ...(kind === 'opt' || kind === 'urbty' ? { types } : {}) };
     log(`[applyhome] ${kind}: 전체 ${total} / 수도권·기간 해당 ${kept}${kind === 'opt' || kind === 'urbty' ? ` · 수도권 유형 ${JSON.stringify(types)}` : ''}`);
-    if (kind === 'urbty' && rows[0]) log(`[applyhome] urbty 필드: ${Object.keys(rows[0]).join(',')}`);
   }
 
   // 주택형별 분양가·특공 세대수 (공고별로 조회)
@@ -124,7 +124,6 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
     let rows = [];
     try { ({ rows } = await all(it._modelOp, key, { 'cond[HOUSE_MANAGE_NO::EQ]': it.houseManageNo })); }
     catch (e) { if (!it.propertyType) throw e; }
-    if (it.propertyType && rows[0]) log(`[applyhome] ${it.propertyType} 주택형 필드: ${Object.keys(rows[0]).join(',')}`);
     it.models = rows.map(m => ({
       type: (m.HOUSE_TY || '').trim(),                         // 예: 084.9600A
       exclusiveArea: parseFloat(m.HOUSE_TY) || parseFloat(m.EXCLUSE_AR) || null, // 전용면적 (오피스텔은 EXCLUSE_AR)

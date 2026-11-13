@@ -146,6 +146,7 @@ if (competitionStatus()) report.notices = [competitionStatus()];
 const failed = report.items.filter(i => i.analysisError);
 if (failed.length >= 3) report.warnings.push(`분석 오류 ${failed.length}건: ${failed[0].analysisError}`);
 // 시세 검산 로그 (공공데이터로 만든 값만, 세대 정보 없음)
+for (const i of report.items.filter(i => i.propertyType || i.mixedUse)) console.log(`유형 ${i.shortName}: ${i.propertyType || '주상복합 추정'} ${i.mixedUse || ''}`);
 for (const i of report.items.filter(i => i.market?.length)) console.log(`시세 ${i.place}|${i.shortName}|🔥${i.hot}|${i.invest.verdict} ` + i.market.map(m => `${Math.round(m.area)}㎡ ${(m.price / 1e8).toFixed(2)}→${m.comp.estimate ? (m.comp.estimate / 1e8).toFixed(2) : '-'} 마진${m.margin != null ? (m.margin / 1e8).toFixed(2) : '-'}${m.reliable ? '' : '?'} n${m.comp.sample ?? 0} ${m.comp.method || ''}`).join(' / '));
 console.log(`분석 오류: ${failed.length}건${failed.length ? ` (${failed[0].analysisError})` : ''}`);
 
