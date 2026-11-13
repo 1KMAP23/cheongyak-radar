@@ -10,6 +10,8 @@ const OPS = {
   remndr:   { detail: 'getRemndrLttotPblancDetail',   model: 'getRemndrLttotPblancMdl' },
   // OPT 계열: 임의공급 + 오피스텔·도시형생활주택·생활숙박시설·민간임대가 섞여 옴 → HOUSE_SECD_NM으로 나눔 (민간임대는 분양이 아니라 뺌)
   opt:      { detail: 'getOPTLttotPblancDetail',      model: 'getOPTLttotPblancMdl' },
+  // 오피스텔·도시형생활주택·생활숙박시설·민간임대 (아파트가 아닌 상품)
+  urbty:    { detail: 'getUrbtyOfctlLttotPblancDetail', model: 'getUrbtyOfctlLttotPblancMdl', optional: true },
 };
 
 async function page(op, key, params, pageNo, perPage = 500) {
@@ -56,16 +58,19 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
   const stats = {};
 
   for (const [kind, op] of Object.entries(OPS)) {
-    const { rows, total } = await all(op.detail, key, { 'cond[RCRIT_PBLANC_DE::GTE]': since });
+    let rows, total;
+    try { ({ rows, total } = await all(op.detail, key, { 'cond[RCRIT_PBLANC_DE::GTE]': since })); }
+    catch (e) { if (!op.optional) throw e; log(`[applyhome] ${kind}: 조회 실패 ${e.message}`); stats[kind] = { error: e.message }; continue; }
     let kept = 0;
     const types = {};
     for (const row of rows) {
       if (!METRO.has(row.SUBSCRPT_AREA_CODE_NM) && !/^(서울|경기|인천)/.test(row.HSSPLY_ADRES || '')) continue;
       const t = String(row.HOUSE_SECD_NM || '');
-      if (kind === 'opt') types[t] = (types[t] || 0) + 1;
+      if (kind === 'opt' || kind === 'urbty') types[t] = (types[t] || 0) + 1;
       // 아파트가 아닌 상품: 오피스텔 / 도시형생활주택 / 생활숙박시설. 민간임대·공공지원임대는 분양이 아니라 제외
-      const propertyType = kind !== 'opt' ? null : /오피스텔/.test(t) ? '오피스텔' : /도시형/.test(t) ? '도시형생활주택' : /생활숙박|생숙/.test(t) ? '생활숙박시설' : null;
+      const propertyType = kind === 'apt' || kind === 'remndr' ? null : /오피스텔/.test(t) ? '오피스텔' : /도시형/.test(t) ? '도시형생활주택' : /생활숙박|생숙/.test(t) ? '생활숙박시설' : null;
       if (kind === 'opt' && t !== '임의공급' && !propertyType) continue;
+      if (kind === 'urbty' && !propertyType) continue; // 민간임대 등
       const w = windowOf(row);
       // 접수가 끝나지 않은 공고는 전부 (오늘 새로 나와서 접수가 2~3주 뒤인 공고도 포함)
       if (!w.end || w.end < from) continue;
@@ -109,13 +114,16 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
       });
       kept++;
     }
-    stats[kind] = { fetched: rows.length, total, kept, ...(kind === 'opt' ? { types } : {}) };
-    log(`[applyhome] ${kind}: 전체 ${total} / 수도권·기간 해당 ${kept}${kind === 'opt' ? ` · 유형 ${JSON.stringify(types)}` : ''}`);
+    stats[kind] = { fetched: rows.length, total, kept, ...(kind === 'opt' || kind === 'urbty' ? { types } : {}) };
+    log(`[applyhome] ${kind}: 전체 ${total} / 수도권·기간 해당 ${kept}${kind === 'opt' || kind === 'urbty' ? ` · 수도권 유형 ${JSON.stringify(types)}` : ''}`);
+    if (kind === 'urbty' && rows[0]) log(`[applyhome] urbty 필드: ${Object.keys(rows[0]).join(',')}`);
   }
 
   // 주택형별 분양가·특공 세대수 (공고별로 조회)
   for (const it of items) {
-    const { rows } = await all(it._modelOp, key, { 'cond[HOUSE_MANAGE_NO::EQ]': it.houseManageNo });
+    let rows = [];
+    try { ({ rows } = await all(it._modelOp, key, { 'cond[HOUSE_MANAGE_NO::EQ]': it.houseManageNo })); }
+    catch (e) { if (!it.propertyType) throw e; }
     if (it.propertyType && rows[0]) log(`[applyhome] ${it.propertyType} 주택형 필드: ${Object.keys(rows[0]).join(',')}`);
     it.models = rows.map(m => ({
       type: (m.HOUSE_TY || '').trim(),                         // 예: 084.9600A
