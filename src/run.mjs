@@ -140,10 +140,13 @@ for (const it of items) {
       out.commutes = {};
       for (const wp of COMMUTE_WPS) out.commutes[wp.id] = await kakao.commute(geo, wp);
       // 평형별 시세: 59㎡·84㎡에 가장 가까운 주택형을 먼저, 남으면 하나 더 (서로 다른 전용면적 최대 3개)
-      const uniq = [...new Map((it.models || []).filter(m => m.exclusiveArea && m.topPrice)
-        .map(m => [Math.round(m.exclusiveArea), m])).values()];
+      // 같은 전용면적(반올림)끼리 묶고 가장 비싼 주택형으로 계산한다 (보수적으로)
+      const byArea = new Map();
+      for (const m of (it.models || []).filter(m => m.exclusiveArea && m.topPrice)) { const k = Math.round(m.exclusiveArea); if (!byArea.has(k) || m.topPrice > byArea.get(k).topPrice) byArea.set(k, m); }
+      const uniq = [...byArea.values()];
       const near = t => uniq.slice().sort((a, b) => Math.abs(a.exclusiveArea - t) - Math.abs(b.exclusiveArea - t))[0];
-      const sizes = [...new Set([near(84), near(59), ...uniq.sort((a, b) => Math.abs(a.exclusiveArea - 84) - Math.abs(b.exclusiveArea - 84))].filter(Boolean))].slice(0, 3);
+      // 모든 평형 시세를 계산한다 (최대 6개, 84·59에 가까운 것부터 → 비교 단지를 84 기준으로 고정)
+      const sizes = [...new Set([near(84), near(59), ...uniq.sort((a, b) => Math.abs(a.exclusiveArea - 84) - Math.abs(b.exclusiveArea - 84))].filter(Boolean))].slice(0, 6);
       out.market = [];
       if (NON_APT.has(out.category)) sizes.length = 0;
       let pinnedKeys = null, pinnedOk = true;

@@ -1,6 +1,6 @@
 // 청약 레이더 웹앱: 잠금 해제 → 목록 → 단지별 분석 페이지 → 공고문 원문 링크
 // 자격·점수는 이 기기에 저장된 '우리 집 정보'로 계산한다 (서버 데이터에는 세대 정보가 없다)
-import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo, normWeights, NON_APT, rentalEligibility, rentalTag, rentalFit, normRentalWeights } from './lib/rules.js';
+import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo, typeRows, taxOf, normWeights, NON_APT, rentalEligibility, rentalTag, rentalFit, normRentalWeights } from './lib/rules.js';
 import { householdView } from './household.js';
 const VAPID_PUBLIC = 'BDGbFHT5-WKQMTzp1Y_tj_5ByKKSqmjqoVrW-P67Yf2_EUMiaAS6Xabst53usz-kz1tCr6UA8OA_vk-gl47xPCA';
 const app = document.getElementById('app');
@@ -266,6 +266,14 @@ const dueTag = it => it.closingToday ? '<span class="etag no">⏰ 오늘 마감<
 const kindTag = it => NON_APT.has(it.category) ? `<span class="etag warn">${({ officetel: '🏢', urban: '🏘', lodging: '🏨' })[it.category]} ${esc(it.categoryLabel)} · 아파트 아님</span>` : '';
 const isNew = it => !!it.isNew; // 지난 업데이트 이후 새로 생긴 공고 (서버에서 비교)
 const sgn = m => (m >= 0 ? '+' : '') + won(m);
+/** 카드용 주택형 표: 전용면적 · 분양가 · 안전마진 (같은 면적 A/B는 묶고, 마진은 가장 비싼 타입 기준) */
+function typeTable(it, max = 6) {
+  const rows = typeRows(it);
+  if (!rows.length) return '<p class="sub types-none">주택형·분양가 정보 없음 (공고문 확인)</p>';
+  const price = r => r.lo === r.hi ? won(r.hi) : `${won(r.lo).replace('억', '')}~${won(r.hi)}`;
+  const mg = r => r.marginHi == null ? '<span class="sub">시세 ?</span>' : `<b class="mono ${r.reliable === false ? 'mid' : mtone(r.marginHi)}">${sgn(r.marginHi)}${r.reliable === false ? '?' : ''}</b>${r.expected ? '<i class="exp">예상</i>' : ''}`;
+  return `<div class="types"><div class="th"><span>전용</span><span>분양가(최고)</span><span>안전마진</span></div>${rows.slice(0, max).map(r => `<div class="tr${r.area >= 57 && r.area <= 61 || r.area >= 82 && r.area <= 86 ? ' main' : ''}"><span class="mono">${r.area}㎡<small>${r.pyeong ? ` ${Math.round(r.pyeong)}평` : ''}</small></span><span class="mono">${price(r)}</span><span>${mg(r)}</span></div>`).join('')}${rows.length > max ? `<div class="more sub">+${rows.length - max}개 타입 더</div>` : ''}</div>`;
+}
 const mtone = m => (m == null ? 'plain' : m >= 2e8 ? 'good' : m >= 1e8 ? 'mid' : 'bad');
 /** 59㎡·84㎡ 칸: 분양가(최고가)와 안전마진 */
 function sizeBox(it, t) {
@@ -282,7 +290,8 @@ function card(it) {
   return `<a class="card" href="#item=${encodeURIComponent(it.id)}">
     <div class="row"><span class="rk mono${it.rank <= 3 ? ' top' : ''}">${it.rank}</span><span class="nm">${isNew(it) ? '<span class="newb">NEW</span> ' : ''}${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</span>${it.fit ? `<span class="fit mono" title="나에게 맞는 정도">${it.fit.total}<small>점</small></span>` : ''}</div>
     ${it.overall.star || it.eligTag || it.overBudget || kindTag(it) ? `<div class="tags">${it.overall.star ? '<span class="pill v-star">⭐ 강력 추천</span>' : ''}${kindTag(it)}${etag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
-    <div class="stats">${sizeBox(it, 59)}${sizeBox(it, 84)}<span class="st ${tone(it.commuteResult.verdict)}"><small>🚗 출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span></div>
+    ${typeTable(it)}
+    <div class="stats one"><span class="st ${tone(it.commuteResult.verdict)}"><small>🚗 출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span></div>
     ${it.hotWhy ? `<div class="hotwhy">🔥 ${esc(it.hotWhy)}</div>` : unsure ? '<div class="hotwhy muted">주변 시세가 이상하게 나와 마진은 참고만 하세요</div>' : ''}
     <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${dueTag(it)}<span>${esc(nextStep(it))}</span></div>
   </a>`;
@@ -322,6 +331,7 @@ function detailView(id) {
   const map = it.geo ? `https://map.kakao.com/link/map/${encodeURIComponent(it.name)},${it.geo.y},${it.geo.x}` : null;
   const nav = it.geo ? `https://map.kakao.com/link/to/${encodeURIComponent(it.name)},${it.geo.y},${it.geo.x}` : null;
   const models = (it.models || []).filter(m => m.topPrice);
+  const trows = typeRows(it);
   const reasonRows = arr => (arr || []).map(n => `<div class="${esc(n.s)}"><b>${esc(n.k)}</b><span>${esc(n.v)}</span></div>`).join('');
   const marketRows = (it.market || []).map(m => `<tr><td>전용 ${m.area}㎡ (${m.pyeong ?? '-'}평)</td><td class="mono">${won(m.price)}</td><td class="mono">${m.comp.estimate ? won(m.comp.estimate) : '-'}</td><td class="mono">${m.margin != null ? sgn(m.margin) + (m.reliable === false ? '?' : '') : esc(m.comp.reason || m.comp.status)}</td></tr>`).join('');
   const comps = (it.market || []).find(m => m.comp.complexes)?.comp.complexes || [];
@@ -384,9 +394,10 @@ function detailView(id) {
       <div><dt>문의</dt><dd class="mono">${esc(it.phone || '-')}</dd></div>
     </dl></section>
 
-    ${models.length ? `<section class="panel"><h2>주택형 · 분양가</h2><div class="tbl"><table><thead><tr><th>주택형</th><th>평형</th><th>최고 분양가</th><th>일반</th><th>특공</th></tr></thead><tbody>
-      ${models.map(m => `<tr><td class="mono">${esc(m.type)}</td><td class="mono">${m.pyeong ?? '-'}평</td><td class="mono">${won(m.topPrice)}</td><td class="mono">${m.general ?? '-'}</td><td class="mono">${m.special ?? '-'}</td></tr>`).join('')}
-    </tbody></table></div><p class="sub" style="margin-top:6px">평형은 공급면적 ÷ 3.3058. 발코니 확장·필수 옵션은 별도예요.</p></section>` : ''}
+    ${models.length ? `<section class="panel"><h2>주택형별 분양가 · 안전마진</h2><div class="tbl"><table><thead><tr><th>주택형</th><th>평형</th><th>최고 분양가</th><th>주변 시세</th><th>안전마진</th><th>일반</th><th>특공</th></tr></thead><tbody>
+      ${models.map(m => { const r = trows.find(x => x.area === Math.round(m.exclusiveArea)); const mg = r?.estimate ? Math.round(r.estimate - m.topPrice - taxOf(m.topPrice, false) - Math.round(m.exclusiveArea * 2e5 / 1e5) * 1e5) : null;
+        return `<tr><td class="mono">${esc(m.type)}</td><td class="mono">${m.pyeong ?? '-'}평</td><td class="mono">${won(m.topPrice)}</td><td class="mono">${r?.estimate ? won(r.estimate) + (r.expected ? ' <i class="exp">예상</i>' : '') : '-'}</td><td class="mono ${mg == null ? '' : r.reliable === false ? 'mid' : mtone(mg)}">${mg == null ? '-' : sgn(mg) + (r.reliable === false ? '?' : '')}</td><td class="mono">${m.general ?? '-'}</td><td class="mono">${m.special ?? '-'}</td></tr>`; }).join('')}
+    </tbody></table></div><p class="sub" style="margin-top:6px">안전마진 = 주변 시세 − 분양가 − 취득세 − 발코니 확장비(추정). '?'는 비교 거래가 적거나 들쭉날쭉해 참고만, '예상'은 주변 민간 신축 분양가 기준 예상치예요. 평형은 공급면적 ÷ 3.3058.</p></section>` : ''}
 
     ${it.buzz ? `<section class="panel"><h2>SNS 언급</h2>${it.buzz.reason ? `<p><b>${esc(it.buzz.reason)}</b></p>` : ''}<p>최근 ${it.buzz.days}일 다음 검색 "${esc(it.buzz.query)}": 블로그 <b class="mono">${it.buzz.blog}${it.buzz.blogCapped ? '+' : ''}</b> · 카페 <b class="mono">${it.buzz.cafe}</b> · 영상 <b class="mono">${it.buzz.vclip}</b> · 웹문서 <b class="mono">${it.buzz.web}${it.buzz.webCapped ? '+' : ''}</b>${it.competition?.maxRate ? ` · 청약 경쟁률 최고 <b class="mono">${it.competition.maxRate}:1</b>` : ''}</p><p class="sub" style="margin-top:6px">블로그에는 분양 홍보 글이 섞여 있어서 화제성이 곧 좋은 단지라는 뜻은 아니에요. 스레드·인스타그램은 공개 검색이 안 돼서 포함하지 못했어요.</p></section>` : ''}
     ${it.analysisNote ? `<div class="banner info">${esc(it.analysisNote)}</div>` : ''}

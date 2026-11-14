@@ -290,7 +290,7 @@ export function isRegulated(it, L) {
   return (L?.regulatedAreas || []).some(r => r === '서울' ? /^서울|서울특별시/.test(a.trim()) || it.region === '서울' : r.split(' ').every(w => a.includes(w.replace(/시$/, ''))));
 }
 
-function taxOf(p, firstHome) {
+export function taxOf(p, firstHome) {
   const rate = p <= 6e8 ? 0.011 : p <= 9e8 ? (p / 1e8 * 2 / 3 - 3) / 100 + 0.001 : 0.033;
   const t = p * rate;
   return Math.max(0, firstHome && p <= 12e8 ? t - 2e6 : t);
@@ -544,4 +544,26 @@ export function rentalFit(it, weights) {
   const bz = it.buzzLevel ?? 0;
   parts.push({ k: 'SNS 화제', v: sc([0, 0.6, 1][bz], W.buzz), max: W.buzz, why: ['언급 보통', '언급 많음', '언급 매우 많음'][bz] });
   return { total: Math.round(parts.reduce((s, p) => s + p.v, 0)), parts, weights: W };
+}
+
+/** 주택형(전용면적)별 분양가·시세·안전마진. 같은 면적의 A/B 타입은 한 줄로 묶는다.
+ *  마진 = 시세(실거래, 없으면 예상치) − 그 타입 분양가 − 취득세 − 발코니 확장비(전용 ㎡당 20만) */
+export function typeRows(it) {
+  const g = new Map();
+  for (const m of it.models || []) {
+    if (!m.topPrice || !m.exclusiveArea) continue;
+    const k = Math.round(m.exclusiveArea);
+    const e = g.get(k) || { area: k, exact: m.exclusiveArea, lo: Infinity, hi: 0, types: [], pyeong: m.pyeong };
+    e.lo = Math.min(e.lo, m.topPrice); e.hi = Math.max(e.hi, m.topPrice); e.types.push(m.type); g.set(k, e);
+  }
+  const marginAt = (est, price, area) => est ? Math.round(est - price - taxOf(price, false) - Math.round(area * 2e5 / 1e5) * 1e5) : null;
+  return [...g.values()].sort((a, b) => a.area - b.area).map(e => {
+    const row = (it.market || []).filter(r => Math.abs(r.area - e.area) <= 1.5).sort((a, b) => Math.abs(a.area - e.area) - Math.abs(b.area - e.area))[0];
+    const real = row?.comp?.estimate || null, reliable = row ? row.reliable !== false : null;
+    const exp = row?.expected?.estimate || null;
+    const useExp = (!real || !reliable) && exp;
+    const est = useExp ? exp : real;
+    return { ...e, estimate: est, expected: !!useExp, reliable: useExp ? true : reliable, thin: row?.comp?.status === '거래 부족',
+      marginHi: marginAt(est, e.hi, e.exact), marginLo: marginAt(est, e.lo, e.exact), method: useExp ? row.expected.source : row?.comp?.method || null };
+  });
 }
