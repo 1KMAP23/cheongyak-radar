@@ -192,3 +192,6 @@ details summary{cursor:pointer;margin-top:10px;color:var(--accent);font-size:.88
 .types-none{margin:0}
 .stats.one{grid-template-columns:1fr}
 .stats.one .st{flex-direction:row;display:flex;justify-content:space-between;align-items:baseline}
+.card .row .nm{flex:1;min-width:0}
+.stats.one .st{padding:5px 10px}
+.stats.one .st b{font-size:.88rem}
