@@ -87,7 +87,6 @@ async function sh({ from, log }) {
       noticeDate: r.date, window: w || { start: r.date, end: null }, endUnknown: !w, noticeUrl: url });
   }
   log(`[임대] SH 주택임대 게시글 ${rows.length} / 아파트 임대 모집 진행중 ${out.length}`);
-  log(`[임대] SH 최근 제목: ${rows.slice(0, 25).map(r => `${r.date} ${r.title}`).join(' | ')}`);
   return out;
 }
 
