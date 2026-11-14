@@ -1,6 +1,6 @@
 // 청약 레이더 웹앱: 잠금 해제 → 목록 → 단지별 분석 페이지 → 공고문 원문 링크
 // 자격·점수는 이 기기에 저장된 '우리 집 정보'로 계산한다 (서버 데이터에는 세대 정보가 없다)
-import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo, normWeights, NON_APT } from './lib/rules.js';
+import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo, normWeights, NON_APT, rentalEligibility, rentalTag, rentalFit, normRentalWeights } from './lib/rules.js';
 import { householdView } from './household.js';
 const VAPID_PUBLIC = 'BDGbFHT5-WKQMTzp1Y_tj_5ByKKSqmjqoVrW-P67Yf2_EUMiaAS6Xabst53usz-kz1tCr6UA8OA_vk-gl47xPCA';
 const app = document.getElementById('app');
@@ -8,7 +8,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }, del: k => { try { localStorage.removeItem(k); } catch {} } };
 const md = s => s ? s.slice(5).replace('-', '/').replace(/^0/, '').replace('/0', '/') : '';
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-let RAW = null, R = null, filter = store.get('cy-filter') || 'all';
+let RAW = null, R = null, filter = store.get('cy-filter') || 'all', mode = store.get('cy-mode') || 'sale', rfilter = 'all';
 const loadHH = () => { try { return JSON.parse(store.get('cy-household') || 'null'); } catch { return null; } };
 
 /** 서버 데이터 + 이 기기의 우리 집 정보 → 화면용 데이터 */
@@ -43,9 +43,25 @@ function enrich(raw) {
   // 추천 점수(적합도) 순. 동점이면 마감이 빠른 순
   items.sort((a, b) => (b.fit.total - a.fit.total) || (a.window?.end || '').localeCompare(b.window?.end || ''));
   items.forEach((it, i) => (it.rank = i + 1));
+  // 임대: 같은 직장·지역 기준, 점수는 출퇴근 50 · 매매 가격대 20 · 입지 20 · SNS 10 (설정에서 변경)
+  const rentals = [];
+  for (const src of raw.rentals || []) {
+    if (regions && !regions.some(r => (src.region || '').startsWith(r))) continue;
+    if (src.window?.end && src.window.end < today) continue;
+    const it = { ...src, closingToday: src.window?.end === today };
+    it.commute = wp ? src.commutes?.[wp.id] || null : null;
+    it.commuteResult = !wp ? { verdict: '확인 필요', text: '설정에서 직장을 고르면 출퇴근 시간을 계산해요' }
+      : wp.custom && !it.commute ? { verdict: '확인 필요', text: '직장 등록 중 · 다음 평일 아침 분석부터 출퇴근 시간이 나와요' } : commuteVerdict(it.commute, wp.name);
+    it.eligibility = rentalEligibility(it, HH, raw.thresholds);
+    it.eligTag = rentalTag(it.eligibility);
+    it.fit = rentalFit(it, HH?.prefs?.rentalWeights);
+    rentals.push(it);
+  }
+  rentals.sort((a, b) => (b.fit.total - a.fit.total) || (a.window?.end || '9').localeCompare(b.window?.end || '9'));
+  rentals.forEach((it, i) => (it.rank = i + 1));
   const count = f => items.filter(f).length;
   const stale = Date.now() - Date.parse(raw.generatedAt) > 20 * 3600e3;
-  return { ...raw, items, HH, wp, hidden, ended, today, stale,
+  return { ...raw, items, rentals, HH, wp, hidden, ended, today, stale,
     summary: { total: items.length, star: count(i => i.overall.star), recommend: count(i => i.invest.verdict === '추천'), conditional: count(i => i.invest.verdict === '조건부'), notRecommend: count(i => i.invest.verdict === '비추천'), hot: count(i => i.hot > 0) } };
 }
 
@@ -123,7 +139,12 @@ function nextStep(it) {
   const [l, [a, b]] = nx;
   return a === t || (a <= t && (b || a) >= t) ? `${l} 오늘${b && b !== t ? `~${md(b)}` : ''}` : `${l} ${md(a)}${b && b !== a ? '~' + md(b) : ''}`;
 }
+function segBar() {
+  return `<div class="seg" role="tablist"><button role="tab" data-m="sale" aria-selected="${mode === 'sale'}">🏠 청약 <b class="mono">${R.items.length}</b></button><button role="tab" data-m="rental" aria-selected="${mode === 'rental'}">🔑 임대 <b class="mono">${R.rentals.length}</b></button></div>`;
+}
+function bindSeg() { app.querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.m; store.set('cy-mode', mode); listView(); window.scrollTo(0, 0); })); }
 function listView() {
+  if (mode === 'rental') return rentalList();
   const W = normWeights(R.HH?.prefs?.weights);
   const ALWAYS = new Set(['all', 'today', 'new', 'soon', 'ok', 'near']);
   const shown = FILTERS.filter(([k, , f]) => ALWAYS.has(k) || k === filter || R.items.some(f));
@@ -138,12 +159,103 @@ function listView() {
     <div class="top"><div><h1>청약 레이더</h1><p class="sub">${new Date(R.generatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} 업데이트 · ${R.items.length}건</p></div>
       <span class="topbtns"><a class="btn" href="#settings" aria-label="설정">⚙︎ 설정</a></span></div>
     ${banners}
+    ${segBar()}
     <div class="chips scroll" role="group" aria-label="필터">${shown.map(([k, l, f]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l} <b class="mono">${R.items.filter(f).length}</b></button>`).join('')}</div>
     <h2 class="sec">👍 추천 순위 <a class="sub" href="#settings">마진 ${W.margin} · 출퇴근 ${W.commute} · 입지 ${W.location} · SNS ${W.buzz} ✎</a></h2>
     <div class="list">${items.length ? items.map(card).join('') : '<p class="sub">조건에 맞는 공고가 없어요.</p>'}</div>
     <p class="sub">청약홈 ${R.sources?.applyhome?.ok === false ? '수집 실패' : '전체'} + LH 단독 공고 ${R.crossCheck?.onlyLH?.length ?? 0}건 포함${R.hidden ? ` · 관심 지역 밖 ${R.hidden}건 숨김` : ''}.<br>투자 자문이 아닌 참고 자료예요. 자격·금액은 반드시 공고문 원문으로 확인하세요.</p>
   </div>`;
   app.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => { filter = b.dataset.f; store.set('cy-filter', filter); listView(); }));
+  bindSeg();
+}
+
+// ── 임대 목록 ──
+const RFILTERS = [
+  ['all', '전체', () => true],
+  ['today', '⏰ 오늘 마감', it => it.closingToday],
+  ['new', '🆕 NEW', it => it.isNew],
+  ['ok', '✅ 자격 됨', it => it.eligibility.status === '가능'],
+  ['maybe', '자격 가능성 있음', it => it.eligibility.status !== '불가'],
+  ['near', '🚗 45분 이내', it => it.commute?.avg && it.commute.avg <= 45],
+];
+const RTYPE_ICON = { '행복주택': '🏠', '행복주택(신혼희망)': '💑', '국민임대': '🏢', '영구임대': '🏢', '통합공공임대': '🏢', '공공임대': '🏢', '장기전세': '🔑', '청년안심주택': '🧑', '공공지원민간임대': '🏘', '재개발임대': '🏢' };
+const rtag = it => it.eligTag ? `<span class="etag ${it.eligTag.icon === '❌' ? 'no' : it.eligTag.icon === '✅' ? 'ok' : 'warn'}">${it.eligTag.icon} ${esc(it.eligTag.text)}${it.eligTag.why ? `<small> (${esc(it.eligTag.why)})</small>` : ''}</span>` : '';
+const rwindow = it => it.endUnknown ? '접수 기간은 공고문 확인' : it.window?.start > R.today ? `접수 ${md(it.window.start)}~${md(it.window.end)}` : `접수 중 ~${md(it.window?.end)}`;
+const rdue = it => it.closingToday ? '<span class="etag no">⏰ 오늘 마감</span>' : it.endUnknown ? '' : it.window?.start > R.today ? `<span class="tag mono">접수 D-${dday(it.window.start)}</span>` : `<span class="tag mono">마감 D-${dday(it.window.end)}</span>`;
+function rentalCard(it) {
+  const c = it.commute?.avg, pl = it.priceLevel;
+  return `<a class="card" href="#item=${encodeURIComponent(it.id)}">
+    <div class="row"><span class="rk mono${it.rank <= 3 ? ' top' : ''}">${it.rank}</span><span class="nm">${it.isNew ? '<span class="newb">NEW</span> ' : ''}${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</span><span class="fit mono">${it.fit.total}<small>점</small></span></div>
+    <div class="tags"><span class="pill rtype">${RTYPE_ICON[it.rentalType] || '🔑'} ${esc(it.rentalType)}</span>${rtag(it)}</div>
+    <div class="stats"><span class="st plain"><small>주변 59㎡ 매매가</small><b class="mono">${pl?.at59 ? '~' + won(pl.at59) : '-'}</b></span><span class="st ${tone(it.commuteResult.verdict)}"><small>🚗 출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span><span class="st plain"><small>공급</small><b>${esc(it.agency)}</b></span></div>
+    <div class="meta">${rdue(it)}<span>${esc(rwindow(it))}</span></div>
+  </a>`;
+}
+function rentalList() {
+  const W = normRentalWeights(R.HH?.prefs?.rentalWeights);
+  const ALWAYS = new Set(['all', 'today', 'new', 'ok', 'near']);
+  const shown = RFILTERS.filter(([k, , f]) => ALWAYS.has(k) || k === rfilter || R.rentals.some(f));
+  const items = R.rentals.filter((RFILTERS.find(f => f[0] === rfilter) || RFILTERS[0])[2]);
+  const src = R.sources?.rentals || {};
+  app.innerHTML = `<div class="wrap">
+    <div class="top"><div><h1>청약 레이더</h1><p class="sub">${new Date(R.generatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} 업데이트 · 임대 ${R.rentals.length}건</p></div>
+      <span class="topbtns"><a class="btn" href="#settings" aria-label="설정">⚙︎ 설정</a></span></div>
+    ${!R.HH ? '<a class="banner info" href="#settings"><b>⚙︎ 설정에서 우리 집 정보를 입력해 주세요 →</b><br><span class="sub">행복주택·국민임대 등 자격(✅·❌)을 바로 판정해요.</span></a>' : ''}
+    ${segBar()}
+    <div class="chips scroll" role="group" aria-label="임대 필터">${shown.map(([k, l, f]) => `<button class="chip" data-rf="${k}" aria-pressed="${rfilter === k}">${l} <b class="mono">${R.rentals.filter(f).length}</b></button>`).join('')}</div>
+    <h2 class="sec">🔑 임대 추천 순위 <a class="sub" href="#settings">출퇴근 ${W.commute} · 가격대 ${W.price} · 입지 ${W.location} · SNS ${W.buzz} ✎</a></h2>
+    <div class="list">${items.length ? items.map(rentalCard).join('') : '<p class="sub">조건에 맞는 임대 공고가 없어요.</p>'}</div>
+    <p class="sub">행복주택·국민임대·영구임대·통합공공임대·공공임대·장기전세·청년안심주택·공공지원민간임대(아파트에 들어가 사는 임대만, 매입임대·전세임대 제외). 출처 LH ${src.lh?.ok === false ? '실패' : '✓'} · SH ${src.sh?.ok === false ? '실패' : '✓'} · GH ${src.gh?.ok === false ? '실패' : '✓'} · 청약홈. 인천도시공사(iH) 자체 공고는 아직 못 가져와요.<br>임대보증금·월임대료는 공고문에서 확인하세요.</p>
+  </div>`;
+  app.querySelectorAll('[data-rf]').forEach(b => b.addEventListener('click', () => { rfilter = b.dataset.rf; rentalList(); }));
+  bindSeg();
+}
+function rentalDetail(it) {
+  const el = it.eligibility, loc = it.location || {}, com = it.commuteResult, pl = it.priceLevel;
+  const map = it.geo ? `https://map.kakao.com/link/map/${encodeURIComponent(it.shortName || it.name)},${it.geo.y},${it.geo.x}` : null;
+  const nav = it.geo ? `https://map.kakao.com/link/to/${encodeURIComponent(it.shortName || it.name)},${it.geo.y},${it.geo.x}` : null;
+  const kpi = (label, val, cls = '', sub = '') => `<div class="kpi ${cls}"><small>${label}</small><b class="mono">${val}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
+  const rows = arr => (arr || []).map(n => `<div class="${esc(n.s)}"><b>${esc(n.k)}</b><span>${esc(n.v)}</span></div>`).join('');
+  const pro = [], con = [];
+  if (el.status === '가능') pro.push('우리 집 자격 됨'); else if (el.status === '불가') con.push(`자격 미달(${it.eligTag?.why || ''})`); else con.push(`자격 확인 필요(${it.eligTag?.why || '공고문'})`);
+  if (it.commute?.avg) (it.commute.avg <= 30 ? pro : it.commute.avg > 45 ? con : pro).push(`출퇴근 ${it.commute.avg}분`);
+  const st = loc.subway?.[0]; if (st) (st.m <= 800 ? pro : st.m > 1500 ? con : pro).push(`${st.name} ${st.m.toLocaleString()}m`);
+  if (pl?.at59) (pl.perPyeong >= 3.5e7 ? pro : pl.perPyeong < 2e7 ? con : pro).push(`주변 59㎡ 매매 ~${won(pl.at59)}`);
+  if (it.buzzLevel) pro.push('SNS 언급 많음');
+  app.innerHTML = `<div class="wrap">
+    <a class="btn back" href="#">← 목록</a>
+    <div><h1>${it.place ? `<span class="place">(${esc(it.place)})</span> ` : ''}${esc(it.shortName || it.name)}</h1><p class="sub">${esc(it.agency)} · ${esc(it.rentalType)}</p></div>
+    <div class="tags"><span class="pill rtype">${RTYPE_ICON[it.rentalType] || '🔑'} ${esc(it.rentalType)}</span>${it.isNew ? '<span class="newb">NEW</span>' : ''}${rdue(it)}${rtag(it)}<span class="tag">${esc(rwindow(it))}</span></div>
+    <div class="kpis">
+      ${kpi('우리 집 자격', esc(el.status), el.status === '가능' ? 'good' : el.status === '불가' ? 'bad' : 'mid', it.eligTag?.why ? esc(it.eligTag.why) : '')}
+      ${kpi('출퇴근', it.commute?.avg ? `${it.commute.avg}분` : '-', tone(com.verdict), R.wp ? esc(R.wp.name) : '직장 미설정')}
+      ${kpi('주변 59㎡ 매매가', pl?.at59 ? '~' + won(pl.at59) : '-', '', pl ? `평당 ${won(pl.perPyeong)} · ${pl.sample}건` : '거래 부족')}
+    </div>
+    <section class="panel pc"><div><h2>👍 강점</h2><ul>${pro.map(x => `<li>${esc(x)}</li>`).join('') || '<li class="sub">없음</li>'}</ul></div><div><h2>👎 약점</h2><ul>${con.map(x => `<li>${esc(x)}</li>`).join('') || '<li class="sub">없음</li>'}</ul></div></section>
+    <div class="actions">
+      ${it.noticeUrl ? `<a class="btn primary" href="${esc(it.noticeUrl)}" target="_blank" rel="noopener">공고문 원문 보기 ↗</a>` : ''}
+      <div class="mini">${map ? `<a class="btn" href="${map}" target="_blank" rel="noopener">지도 ↗</a>` : ''}${nav ? `<a class="btn" href="${nav}" target="_blank" rel="noopener">길찾기 ↗</a>` : ''}</div>
+    </div>
+    <section class="panel"><h2>우리 집 자격</h2><div class="reasons">${rows(el.checks)}</div><p class="sub" style="margin-top:6px">2026년 LH·SH 공고 기준으로 판정했어요. 공고마다 기준이 조금씩 달라서 최종 자격은 공고문으로 확인하세요.</p></section>
+    <section class="panel"><h2>추천 점수 <span class="mono">${it.fit.total}점</span> <span class="sub">/ 100</span></h2><div class="bars">${it.fit.parts.filter(p => p.max > 0).map(p => `<div><b>${esc(p.k)}</b><span class="bar"><i style="width:${Math.round(p.v / p.max * 100)}%"></i></span><span class="mono">${p.v}/${p.max}</span><span class="sub">${esc(p.why)}</span></div>`).join('')}</div></section>
+    <section class="panel"><h2>입지</h2><div class="reasons">
+      ${(loc.subway || []).map(s => `<div class="${s.m <= 800 ? 'good' : s.m <= 1500 ? 'mid' : 'bad'}"><b>지하철</b><span>${esc(s.name)} ${s.m.toLocaleString()}m</span></div>`).join('') || (it.geo ? '<div class="bad"><b>지하철</b><span>반경 2km 안에 없음</span></div>' : '')}
+      ${(loc.elementary || []).map(s => `<div class="${s.m <= 400 ? 'good' : 'mid'}"><b>초등학교</b><span>${esc(s.name)} ${s.m.toLocaleString()}m</span></div>`).join('')}
+      ${loc.academies1km != null ? `<div class="${loc.academies1km >= 15 ? 'good' : 'mid'}"><b>학원</b><span>1km 안 ${loc.academies1km}곳</span></div>` : ''}
+      <div class="mid"><b>출퇴근</b><span>${esc(com.text)}</span></div>
+      ${pl ? `<div class="mid"><b>동네 시세</b><span>주변 아파트 59㎡ 매매 약 ${won(pl.at59)} (평당 ${won(pl.perPyeong)}, ${esc(pl.method || '')} ${pl.sample}건)</span></div>` : ''}
+    </div></section>
+    <section class="panel"><h2>기본 정보</h2><dl class="facts">
+      <div><dt>공급</dt><dd>${esc(it.agency)}</dd></div>
+      <div><dt>유형</dt><dd>${esc(it.rentalType)}</dd></div>
+      <div><dt>공고일</dt><dd>${esc(it.noticeDate || '-')}</dd></div>
+      <div><dt>접수</dt><dd>${esc(it.endUnknown ? '공고문 확인' : `${it.window?.start || ''} ~ ${it.window?.end || ''}`)}</dd></div>
+      <div><dt>보증금·월세</dt><dd>공고문 확인</dd></div>
+    </dl></section>
+    ${it.analysisNote ? `<div class="banner info">${esc(it.analysisNote)}</div>` : ''}
+    <p class="sub">투자 자문이 아닌 참고 자료예요. 자격·임대료는 반드시 공고문 원문으로 확인하세요.</p>
+  </div>`;
+  window.scrollTo(0, 0);
 }
 const etag = it => it.eligTag ? `<span class="etag ${it.eligTag.icon === '❌' ? 'no' : 'warn'}">${it.eligTag.icon} ${esc(it.eligTag.text)}${it.eligTag.why ? `<small> (${esc(it.eligTag.why)})</small>` : ''}</span>` : '';
 const dday = d => Math.round((Date.parse(d) - Date.parse(R.today)) / 864e5);
@@ -205,7 +317,7 @@ function prosCons(it) {
 }
 function detailView(id) {
   const it = R.items.find(i => i.id === id);
-  if (!it) { location.hash = ''; return; }
+  if (!it) { const r = R.rentals.find(i => i.id === id); if (r) return rentalDetail(r); location.hash = ''; return; }
   const loc = it.location || {}, el = it.eligibility, inv = it.invest, com = it.commuteResult;
   const map = it.geo ? `https://map.kakao.com/link/map/${encodeURIComponent(it.name)},${it.geo.y},${it.geo.x}` : null;
   const nav = it.geo ? `https://map.kakao.com/link/to/${encodeURIComponent(it.name)},${it.geo.y},${it.geo.x}` : null;

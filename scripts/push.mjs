@@ -14,6 +14,7 @@ function payload(s) {
   if (s.topNames?.length) lines.push(`👍 추천 순위: ${s.topNames.slice(0, 3).map((n, i) => `${i + 1}. ${short(n)}`).join(' ')}`);
   if (s.star) lines.push(`⭐ ${s.starNames.slice(0, 2).map(short).join(', ')}`);
   if (s.closingTodayNames?.length) lines.push(`⏰ 오늘 마감: ${s.closingTodayNames.slice(0, 2).map(short).join(', ')}${s.closingTodayNames.length > 2 ? ` 외 ${s.closingTodayNames.length - 2}` : ''}`);
+  if (s.rentalTop?.length) lines.push(`🔑 임대: ${s.rentalTop.slice(0, 2).map((n, i) => `${i + 1}. ${short(n)}`).join(' ')}`);
   if (s.hotNames?.length) lines.push(`🔥 시세보다 2억+ 싼 곳: ${s.hotNames.slice(0, 2).map(short).join(', ')}`);
   lines.push(`접수 ${s.total}건 · 추천 ${s.recommend} · 조건부 ${s.conditional}`);
   if (s.warnings) lines.push(`⚠️ 수집 경고 ${s.warnings}건`);

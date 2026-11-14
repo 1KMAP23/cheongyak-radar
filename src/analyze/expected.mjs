@@ -6,6 +6,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { haversine } from '../collect/kakao.mjs';
 import { recentPrivate, modelsOf } from '../collect/applyhome.mjs';
 
+const stem = n => String(n || '').replace(/\(.*?\)|\[.*?\]|\s|아파트|입주자모집공고|공고/g, '').slice(0, 8);
 const median = a => { const s = [...a].sort((x, y) => x - y); const n = s.length; return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : null; };
 
 export function makeExpected({ key, kakao, from, log = console.log }) {
@@ -27,8 +28,11 @@ export function makeExpected({ key, kakao, from, log = console.log }) {
     const key84 = m && Object.keys(m.areas || {}).map(Number).sort((a, b) => Math.abs(a - area) - Math.abs(b - area))[0];
     if (m && key84 != null && Math.abs(key84 - area) <= 8) return { estimate: m.areas[key84], kind: 'manual', source: m.source, url: m.url || null, refs: [] };
     const all = await load();
-    const near = all.filter(r => r.houseManageNo !== it.houseManageNo && r.name !== it.name)
-      .map(r => ({ ...r, m: haversine(point, r.geo) })).filter(r => r.m <= 8000).sort((a, b) => a.m - b.m).slice(0, 4);
+    // 자기 자신(조합원 취소분 등 이름만 다른 같은 단지)은 빼고, 같은 단지 공고가 여러 번이면 하나만
+    const seen = new Set([stem(it.name)]);
+    const near = all.filter(r => r.houseManageNo !== it.houseManageNo)
+      .map(r => ({ ...r, m: haversine(point, r.geo) })).filter(r => r.m <= 8000).sort((a, b) => a.m - b.m)
+      .filter(r => { const k = stem(r.name); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 4);
     const refs = [];
     for (const r of near) {
       if (!models.has(r.houseManageNo)) { try { models.set(r.houseManageNo, await modelsOf(key, r.houseManageNo)); } catch { models.set(r.houseManageNo, []); } }

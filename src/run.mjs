@@ -9,6 +9,8 @@ import { makeExpected } from './analyze/expected.mjs';
 import { NON_APT } from '../web/lib/rules.js';
 import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL, fitScore, eligibilityTag, placeLabel, shortName, marginHot, TH } from './analyze/judge.mjs';
 import { buzz, hotLevel } from './collect/buzz.mjs';
+import { collectRentals, fromApplyhomeRental } from './collect/rentals.mjs';
+import { rentalEligibility, rentalFit, rentalTag } from '../web/lib/rules.js';
 import { competition, competitionStatus } from './collect/competition.mjs';
 
 function loadEnv() {
@@ -94,6 +96,9 @@ for (const it of items) {
 }
 // 오피스텔·생활숙박시설·주상복합(추정)은 목록에서 뺀다. 누락 확인용으로 이름은 로그와 보고서에 남김
 // 청약홈 아파트 공고(APT)는 같은 단지에 오피스텔이 있어도 아파트 분양이라 절대 빼지 않는다
+// 청약홈 공공지원민간임대는 임대 목록으로 옮긴다
+const ahRental = items.filter(i => i.propertyType === '민간임대');
+for (const x of ahRental) items.splice(items.indexOf(x), 1);
 const excluded = items.filter(i => i.propertyType === '오피스텔' || i.propertyType === '생활숙박시설');
 for (const x of excluded) items.splice(items.indexOf(x), 1);
 report.excluded = excluded.map(x => ({ name: x.name, type: x.propertyType }));
@@ -109,7 +114,7 @@ async function previousIds() {
     const base = await webcrypto.subtle.importKey('raw', new TextEncoder().encode(process.env.APP_PASSPHRASE || ''), 'PBKDF2', false, ['deriveKey']);
     const k = await webcrypto.subtle.deriveKey({ name: 'PBKDF2', salt: b(e.salt), iterations: e.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
     const prev = JSON.parse(new TextDecoder().decode(await webcrypto.subtle.decrypt({ name: 'AES-GCM', iv: b(e.iv) }, k, b(e.ct))));
-    return { at: prev.generatedAt, ids: new Set(prev.items.map(i => i.id)) };
+    return { at: prev.generatedAt, ids: new Set([...prev.items, ...(prev.rentals || [])].map(i => i.id)) };
   } catch (err) { console.log(`지난 데이터 읽기 실패 → NEW 표시 안 함: ${err.message}`); return null; }
 }
 const PREV = await previousIds();
@@ -155,7 +160,7 @@ for (const it of items) {
         const reliable = margin != null && comp.reliable !== false && ratio >= 0.6 && ratio <= 1.6;
         const row = { type: m.type, area: Math.round(m.exclusiveArea * 10) / 10, pyeong: m.pyeong, price: m.topPrice, tax, balcony, comp, margin, reliable };
         // 실거래로 믿을 만한 시세가 없으면(신도시 등) 주변 민간 신축 분양가로 '예상 시세'를 붙인다
-        if (!reliable && (comp.status === '거래 부족' || !comp.estimate)) {
+        if (newTown && !reliable && (comp.status === '거래 부족' || !comp.estimate)) {
           const ex = await expectedPrice(it, geo, m.exclusiveArea);
           if (ex?.estimate) { row.expected = ex; row.expMargin = ex.estimate - m.topPrice - tax - balcony; }
         }
@@ -187,6 +192,48 @@ for (const it of items) {
   out.shortName = shortName(it.name);
   report.items.push(out);
 }
+
+// ── 임대 (행복주택·국민임대·장기전세 등) ──
+const rentalShort = n => n.replace(/^\[[^\]]*\]\s*/, '').replace(/\(\s*20\d{2}[.\-]\s*\d{1,2}[.\-]\s*\d{1,2}\.?\s*\)/g, '').replace(/['‘’]?\d{2}년\s*\d{1,2}월\s*/, '')
+  .replace(/(입주자\s*및\s*)?예비\s*입주자\s*모집\s*공고(문)?|입주자\s*모집\s*공고(문)?|모집\s*공고(문)?|모집$/g, '').replace(/\s+/g, ' ').trim();
+function rentalQuery(r) {
+  const inParen = (r.name.match(/\(([^)]*(아파트|단지|자이|힐스|푸르지오|래미안|e편한|센트럴|파크|마을|타운)[^)]*)\)/) || [])[1];
+  const core = r.name.replace(/^\[[^\]]*\]/, '').replace(/\(.*?\)/g, ' ').replace(/['‘’]?\d{2}년|\d{1,2}월|행복주택|국민임대주택|국민임대|영구임대주택|영구임대|통합공공임대주택|통합공공임대|공공임대주택|장기전세주택|장기전세|청년안심주택|신혼희망|예비입주자|입주자|모집|공고|추가|잔여|및|형$|\d+형/g, ' ').replace(/\s+/g, ' ').trim();
+  return [inParen && `${r.region || ''} ${inParen}`.trim(), core && `${r.region === '서울' && !/서울/.test(core) ? '서울 ' : ''}${core}`].filter(Boolean);
+}
+let rentals = [];
+try {
+  const r = await collectRentals({ key: KEY, from });
+  rentals = [...r.items, ...fromApplyhomeRental(ahRental)];
+  report.sources.rentals = r.stats;
+} catch (e) { report.warnings.push(`임대 수집 실패: ${e.message}`); }
+report.rentals = [];
+for (const r of rentals) {
+  const out = { ...r, kind: 'rental', categoryLabel: r.rentalType };
+  try {
+    let geo = null;
+    for (const q of rentalQuery(r)) { try { geo = await kakao.geocode(q); } catch {} if (geo) break; }
+    out.geo = geo;
+    // 시·군·구 단위로 여러 단지를 한꺼번에 모집하는 예비입주자 공고는 위치가 대략적이다
+    if (/[시군구]\s*(국민|영구|행복|통합)|예비입주자/.test(r.name) && !/\(.*\)/.test(r.name)) out.analysisNote = '한 지역의 여러 단지를 한꺼번에 모집하는 공고라 위치·출퇴근은 지역 중심 기준이에요. 단지 목록은 공고문에서 확인하세요.';
+    if (geo) {
+      out.location = await kakao.nearby(geo);
+      out.commutes = {};
+      for (const wp of COMMUTE_WPS) out.commutes[wp.id] = await kakao.commute(geo, wp);
+      const c = await comparables({ key: KEY, kakao, point: geo, lawd: geo.lawd, area: 59, newTown: false, name: '' });
+      if (c.estimate) out.priceLevel = { perPyeong: c.perPyeong, at59: c.estimate, sample: c.sample, method: c.method, reliable: c.reliable !== false, radius: c.radius };
+    } else out.analysisNote = '공고명으로 위치를 찾지 못했어요. 단지 위치는 공고문에서 확인하세요.';
+  } catch (e) { out.analysisError = String(e.message || e); }
+  try { out.buzz = await buzz(kakao, { ...out, shortName: rentalShort(r.name) }); } catch { out.buzz = null; }
+  out.buzzLevel = hotLevel(out.buzz, null);
+  out.closingToday = r.window?.end === from;
+  out.isNew = PREV ? !PREV.ids.has(r.id) : false;
+  out.shortName = rentalShort(r.name);
+  out.place = out.geo ? placeLabel(out) : (r.region || '');
+  report.rentals.push(out);
+}
+console.log(`임대: ${report.rentals.length}건 (${Object.entries(report.rentals.reduce((m, r) => ((m[r.rentalType] = (m[r.rentalType] || 0) + 1), m), {})).map(([k, v]) => `${k} ${v}`).join(', ')}) · 출처 ${JSON.stringify(report.sources.rentals || {})}`);
+for (const r of report.rentals) console.log(`임대 ${r.agency}|${r.rentalType}|${r.shortName}|${r.window?.start}~${r.window?.end || '기간 확인'}|${r.geo ? 'geo' : 'NOGEO'}|59㎡ ${r.priceLevel?.at59 ? (r.priceLevel.at59 / 1e8).toFixed(1) + '억' : '-'}`);
 
 if (competitionStatus()) report.notices = [competitionStatus()];
 // 분석 실패 감시: 위치를 찾은 공고 중 시세 분석이 깨진 게 많으면 앱 상단에 경고
@@ -230,6 +277,12 @@ function summarize(hh, prefs = hh?.prefs) {
     topNames: view.slice(0, 3).map(i => i.label),
     closingTodayNames: view.filter(i => i.closingToday).map(i => i.label),
     recommendNames: view.filter(i => i.invest.verdict === '추천').map(i => i.label),
+    rentalTop: (report.rentals || []).filter(i => !regions?.length || regions.some(r => (i.region || '').startsWith(r))).map(i => {
+      const v = { ...i, commute: wpId ? i.commutes?.[wpId] || null : null };
+      v.fit = rentalFit(v, prefs?.rentalWeights);
+      const t = rentalTag(rentalEligibility(v, hh, TH));
+      return { label: `(${i.place}) ${i.shortName}${t?.icon === '❌' ? ' ❌' : ''}`, score: v.fit.total };
+    }).sort((a, b) => b.score - a.score).slice(0, 3).map(x => x.label),
   };
 }
 // 아침 푸시: 저장소 주인 세대(HOUSEHOLD_JSON) + 동의한 사용자 각자 기준. 이 결과는 공유 보고서에 넣지 않는다

@@ -69,7 +69,7 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
       const t = String((kind === 'urbty' ? row.HOUSE_DTL_SECD_NM : row.HOUSE_SECD_NM) || '');
       if (kind === 'opt' || kind === 'urbty') types[t] = (types[t] || 0) + 1;
       // 아파트가 아닌 상품: 오피스텔 / 도시형생활주택 / 생활숙박시설. 민간임대·공공지원임대는 분양이 아니라 제외
-      const propertyType = kind === 'apt' || kind === 'remndr' ? null : /오피스텔/.test(t) ? '오피스텔' : /도시형/.test(t) ? '도시형생활주택' : /생활숙박|생숙/.test(t) ? '생활숙박시설' : null;
+      const propertyType = kind === 'apt' || kind === 'remndr' ? null : /오피스텔/.test(t) ? '오피스텔' : /도시형/.test(t) ? '도시형생활주택' : /생활숙박|생숙/.test(t) ? '생활숙박시설' : /민간임대/.test(t) ? '민간임대' : null;
       if (kind === 'opt' && t !== '임의공급' && !propertyType) continue;
       if (kind === 'urbty' && !propertyType) continue; // 민간임대 등
       const w = windowOf(row);

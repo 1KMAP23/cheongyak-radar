@@ -1,7 +1,8 @@
 // 설정 화면 하나: 우리 집 정보 + 직장 + 추천 점수 비율 + 알림 + 이 기기
 // 설정은 이 기기에 저장되고, 서버 주소가 설정돼 있으면 서버(구글 시트)에도 저장된다.
-import { DEFAULT_WEIGHTS, normWeights } from './lib/rules.js';
+import { DEFAULT_WEIGHTS, normWeights, RENTAL_DEFAULT_WEIGHTS, normRentalWeights } from './lib/rules.js';
 const MAN = 1e4; // 입력은 만원 단위
+const RWK = [['commute', '출퇴근'], ['price', '주변 매매 가격대'], ['location', '입지 (지하철·학군)'], ['buzz', 'SNS 화제']];
 const WK = [['margin', '안전마진'], ['commute', '출퇴근'], ['location', '입지 (지하철·학군·규모·브랜드)'], ['buzz', 'SNS 화제']];
 
 /** 직장 주소 → 공개 데이터에 쓰는 익명 ID (서버 src/run.mjs의 workplaceId와 같은 방식) */
@@ -35,6 +36,7 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
     <button type="button" class="link" data-del>삭제</button></div>`;
 
   const W = normWeights(h.prefs?.weights);
+  const RW = normRentalWeights(h.prefs?.rentalWeights);
   const custom = !!h.prefs?.workplaceAddress;
   app.innerHTML = `<div class="wrap hh">
     <a class="btn back" href="#">← 목록</a>
@@ -110,6 +112,12 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
       <button type="button" class="btn" id="w-reset">기본값 (마진 ${DEFAULT_WEIGHTS.margin} · 출퇴근 ${DEFAULT_WEIGHTS.commute} · 입지 ${DEFAULT_WEIGHTS.location} · SNS ${DEFAULT_WEIGHTS.buzz})</button>
     </section>
 
+    <section class="panel"><h2>8-2. 임대 점수 비율</h2>
+      <p class="sub">임대는 안전마진이 없어서 따로 정해요.</p>
+      ${RWK.map(([k, l]) => `<label class="fld"><span>${l}</span><span class="unit"><input id="rw-${k}" type="number" inputmode="numeric" min="0" max="100" step="1" value="${RW[k]}"><i>점</i></span></label>`).join('')}
+      <button type="button" class="btn" id="rw-reset">기본값 (출퇴근 ${RENTAL_DEFAULT_WEIGHTS.commute} · 가격대 ${RENTAL_DEFAULT_WEIGHTS.price} · 입지 ${RENTAL_DEFAULT_WEIGHTS.location} · SNS ${RENTAL_DEFAULT_WEIGHTS.buzz})</button>
+    </section>
+
     <section class="panel"><h2>9. 매일 아침 8시 알림</h2>
       ${push?.standalone ? `<p class="sub">평일 아침 8시에 내 추천 순위로 알림이 와요. 알림을 켜고 저장하면 받을 수 있어요.</p>
         <p><button class="btn" id="push" type="button">${push.subscribed ? '알림 켜짐 ✓ (다시 연결)' : '알림 켜기'}</button></p><div class="err" id="perr"></div>`
@@ -140,6 +148,7 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
   const sumW = () => { const t = WK.reduce((s, [k]) => s + (+$(`w-${k}`).value || 0), 0); $('w-sum').textContent = `합계 ${t}점${t === 100 ? '' : ' → 저장하면 100점에 맞춰요'}`; };
   WK.forEach(([k]) => ($(`w-${k}`).oninput = sumW)); sumW();
   $('w-reset').onclick = () => { WK.forEach(([k]) => ($(`w-${k}`).value = DEFAULT_WEIGHTS[k])); sumW(); };
+  $('rw-reset').onclick = () => { RWK.forEach(([k]) => ($(`rw-${k}`).value = RENTAL_DEFAULT_WEIGHTS[k])); };
   $('forget').onclick = () => onForget?.();
 
   if ($('push')) $('push').onclick = async () => {
@@ -187,6 +196,7 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
         workplaceAddress: $('wp').value === '__custom' ? $('wp-addr').value.trim() || null : null,
         regions: ['서울', '경기', '인천'].filter(r => $(`rg-${r}`).checked), maxPrice: won('maxp'),
         weights: normWeights(Object.fromEntries(WK.map(([k]) => [k, num(`w-${k}`) ?? 0]))),
+        rentalWeights: normRentalWeights(Object.fromEntries(RWK.map(([k]) => [k, num(`rw-${k}`) ?? 0]))),
       },
       shareConsent: !!canShare,
     };

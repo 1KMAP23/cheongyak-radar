@@ -104,6 +104,83 @@
           "note": "부부 합산 연소득 7천만 이하. DSR 미적용"
         }
       ]
+    },
+    "rental": {
+      "_source": "2026 LH 국민임대·행복주택 공고 기준(정리: jugeo.co.kr, mcheam.com). 매년 바뀌므로 공고문 우선",
+      "medianIncome": {
+        "1": 2564238,
+        "2": 4199292,
+        "3": 5359036,
+        "4": 6494738,
+        "5": 7556719,
+        "6": 8555952
+      },
+      "national": {
+        "incomePctBySize": {
+          "1": 0.9,
+          "2": 0.8,
+          "3": 0.7,
+          "4": 0.7,
+          "5": 0.7,
+          "6": 0.7
+        },
+        "totalAsset": [
+          345000000,
+          379000000,
+          413000000
+        ],
+        "car": [
+          45420000,
+          49960000,
+          54510000
+        ],
+        "childSince": "2023-03-28"
+      },
+      "happy": {
+        "newlywed": {
+          "incomePct": 1.0,
+          "incomePct2": 1.1,
+          "incomePctDual": 1.2,
+          "totalAsset": 345000000,
+          "car": 45420000
+        },
+        "youth": {
+          "incomePct": 1.0,
+          "incomePct1": 1.2,
+          "incomePct2": 1.1,
+          "totalAsset": 251000000,
+          "car": 45420000,
+          "ageMin": 19,
+          "ageMax": 39
+        },
+        "elderly": {
+          "incomePct": 1.0,
+          "incomePct1": 1.2,
+          "incomePct2": 1.1,
+          "totalAsset": 345000000,
+          "car": 45420000,
+          "ageMin": 65
+        }
+      },
+      "integrated": {
+        "medianPct": 1.5,
+        "medianPct1": 1.8,
+        "medianPct2": 1.7,
+        "totalAsset": 345000000,
+        "car": 45420000
+      },
+      "publicLease": {
+        "incomePct": 1.0,
+        "realEstate": 215500000,
+        "car": 45420000
+      },
+      "longJeonse": {
+        "incomePctSmall": 1.0,
+        "incomePctSmallDual": 1.2,
+        "incomePctMid": 1.2,
+        "incomePctMidDual": 1.4,
+        "_note": "SH 장기전세: 자산 기준은 공고마다 달라 '공고문 확인'으로 둔다"
+      }
     }
   }
 }

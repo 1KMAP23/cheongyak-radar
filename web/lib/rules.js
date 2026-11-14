@@ -407,3 +407,141 @@ export function sizeInfo(it, target) {
   return { area: row?.area ?? Math.round(same[0].exclusiveArea * 10) / 10, lo, hi, margin: row?.margin ?? null, estimate: row?.comp?.estimate ?? null, reliable: row ? row.reliable !== false : true, method: row?.comp?.method, thin: row?.comp?.status === '거래 부족',
     expected: row?.expected || null, expMargin: row?.expMargin ?? null };
 }
+
+// ───────────────────────── 임대 ─────────────────────────
+export const RENTAL_DEFAULT_WEIGHTS = { commute: 50, price: 20, location: 20, buzz: 10 };
+export function normRentalWeights(w) {
+  const k = ['commute', 'price', 'location', 'buzz'];
+  const v = Object.fromEntries(k.map(x => [x, Math.max(0, +(w?.[x] ?? RENTAL_DEFAULT_WEIGHTS[x]) || 0)]));
+  const sum = k.reduce((s, x) => s + v[x], 0);
+  if (!sum) return { ...RENTAL_DEFAULT_WEIGHTS };
+  const out = Object.fromEntries(k.map(x => [x, Math.round(v[x] / sum * 100)]));
+  out.commute += 100 - k.reduce((s, x) => s + out[x], 0);
+  return out;
+}
+const ageAt = (birth, date) => birth ? Math.floor(yearsBetween(bd(birth), date)) : null;
+function householdSize(h, date) {
+  const born = (h.children || []).filter(c => c.birth && bd(c.birth) <= date).length;
+  return 1 + (h.marriageDate ? 1 : 0) + born + (+h.parentsDependents || 0);
+}
+function rentalAssets(h, date) {
+  const a = h.assets || {};
+  const yr = date.slice(0, 4);
+  const cars = (a.cars || []).filter(c => c.inHousehold !== false && (!c.registeredAt || c.registeredAt <= date || true));
+  const carVals = cars.map(c => +(c.values?.[yr] ?? c.values?.[+yr] ?? c.baseValue ?? 0) || 0);
+  const total = (+a.realEstate || 0) + (+a.jeonseDeposit || 0) + (+a.financial || 0) + carVals.reduce((s, v) => s + v, 0) - (+a.debt || 0);
+  return { total, maxCar: carVals.length ? Math.max(...carVals) : 0, carUnknown: cars.some(c => !c.values && !c.baseValue), realEstate: +a.realEstate || 0 };
+}
+
+/** 임대 공고 자격: 유형별 소득·자산·계층 */
+export function rentalEligibility(it, h, TH) {
+  if (!h) return { status: '확인 필요', checks: [{ k: '우리 집 정보', v: '설정에서 입력하면 임대 자격을 판정해요', s: 'mid' }] };
+  const date = it.noticeDate || new Date().toISOString().slice(0, 10);
+  const T = pickThresholds(TH, date.slice(0, 4)), R = T.rental;
+  const checks = [], push = (k, v, s) => checks.push({ k, v, s });
+  const type = it.rentalType;
+  const size = householdSize(h, date);
+  const inc = Object.values(h.monthlyIncome || {}).reduce((s, v) => s + (+v || 0), 0);
+  const dual = +h.monthlyIncome?.applicant > 0 && +h.monthlyIncome?.partner > 0;
+  const urban = T.urbanIncome100[String(Math.min(size, 5))];
+  const A = rentalAssets(h, date);
+  const kidsSince = (h.children || []).filter(c => c.birth && bd(c.birth) <= date && bd(c.birth) >= (R.national.childSince)).length;
+  const pct = (v, base) => `${Math.round(v / base * 100)}%`;
+  const incomeCheck = (limitPct, label = '소득') => {
+    if (!inc) return push(label, '월소득 미입력 → 공고문 기준과 직접 비교', 'mid');
+    const lim = urban * limitPct;
+    push(label, `세대 월소득 ${won(inc)} (도시근로자 ${size}인 가구 평균의 ${pct(inc, urban)}) · 기준 ${Math.round(limitPct * 100)}% = ${won(lim)}`, inc <= lim ? 'good' : 'bad');
+  };
+  const assetCheck = (limit, car, label = '총자산') => {
+    push(label, `${won(A.total)} (부동산+전세보증금+금융+자동차−부채) · 기준 ${won(limit)}`, A.total <= limit ? 'good' : 'bad');
+    if (car != null) push('자동차', A.maxCar ? `가장 비싼 차 ${won(A.maxCar)} · 기준 ${won(car)}` : '차량 없음', A.maxCar <= car ? 'good' : 'bad');
+  };
+  if (h.homeless === false) push('무주택', '세대원 중 집이 있으면 공공임대 신청 불가', 'bad'); else push('무주택', '세대원 전원 무주택', 'good');
+
+  const married7 = h.marriageDate && yearsBetween(h.marriageDate, date) <= 7;
+  const kid6 = (h.children || []).some(c => c.birth && (c.expected || yearsBetween(bd(c.birth), date) <= 6));
+  const age = ageAt(h.applicantInfo?.birth, date);
+
+  if (type === '국민임대') {
+    const i = Math.min(kidsSince, 2);
+    incomeCheck(R.national.incomePctBySize[String(Math.min(size, 6))]);
+    assetCheck(R.national.totalAsset[i], R.national.car[i]);
+    if ((h.children || []).some(c => c.expected)) push('출산 후', `아이가 태어나면 총자산 기준이 ${won(R.national.totalAsset[Math.min(i + 1, 2)])}로 올라가요`, 'mid');
+  } else if (type === '행복주택' || type === '행복주택(신혼희망)') {
+    const nw = married7 || h.preMarriage || (h.singleParent && kid6) || kid6;
+    if (nw) {
+      const N = R.happy.newlywed;
+      push('계층', `신혼부부·한부모 계층 (${married7 ? '혼인 7년 이내' : h.preMarriage ? '예비 신혼' : '6세 이하 자녀'})`, 'good');
+      incomeCheck(dual ? N.incomePctDual : size === 2 ? N.incomePct2 : N.incomePct);
+      if (type === '행복주택(신혼희망)') assetCheck(T.newlywedHopeTown.totalAssetNet, T.publicSale.car);
+      else assetCheck(N.totalAsset, N.car);
+    } else if (age != null && age >= R.happy.youth.ageMin && age <= R.happy.youth.ageMax && !h.marriageDate) {
+      const Y = R.happy.youth;
+      push('계층', `청년 계층 (만 ${age}세, 미혼)`, 'good');
+      incomeCheck(size === 1 ? Y.incomePct1 : size === 2 ? Y.incomePct2 : Y.incomePct);
+      assetCheck(Y.totalAsset, Y.car);
+    } else if (age != null && age >= R.happy.elderly.ageMin) {
+      push('계층', `고령자 계층 (만 ${age}세)`, 'good');
+      incomeCheck(R.happy.elderly.incomePct); assetCheck(R.happy.elderly.totalAsset, R.happy.elderly.car);
+    } else push('계층', '청년(19~39세 미혼)·신혼부부(혼인 7년 이내·6세 이하 자녀)·고령자(65세 이상) 중 해당 없음', 'bad');
+  } else if (type === '통합공공임대') {
+    const I = R.integrated, med = R.medianIncome[String(Math.min(size, 6))];
+    const lim = (size === 1 ? I.medianPct1 : size === 2 ? I.medianPct2 : I.medianPct) * med;
+    if (inc) push('소득', `세대 월소득 ${won(inc)} · 기준 중위소득 ${size}인 ${Math.round(lim / med * 100)}% = ${won(lim)}`, inc <= lim ? 'good' : 'bad');
+    else push('소득', '월소득 미입력', 'mid');
+    assetCheck(I.totalAsset, I.car);
+  } else if (type === '공공임대') {
+    incomeCheck(R.publicLease.incomePct);
+    push('부동산', `${won(A.realEstate)} · 기준 ${won(R.publicLease.realEstate)}`, A.realEstate <= R.publicLease.realEstate ? 'good' : 'bad');
+    push('자동차', A.maxCar ? `${won(A.maxCar)} · 기준 ${won(R.publicLease.car)}` : '차량 없음', A.maxCar <= R.publicLease.car ? 'good' : 'bad');
+    push('청약통장', '분양전환 공공임대는 청약통장 순위로 뽑아요', 'mid');
+  } else if (type === '영구임대') {
+    push('계층', h.singleParent ? '한부모 가족은 영구임대 대상 계층일 수 있어요 → 공고문 확인' : '수급자·차상위·국가유공자·장애인·한부모 등 대상 계층만 신청할 수 있어요', h.singleParent ? 'mid' : 'bad');
+  } else if (type === '장기전세') {
+    const L = R.longJeonse;
+    push('거주지', it.agency === 'SH' ? (h.residence?.sido === '서울' ? '서울 거주 → SH 장기전세 우선 대상' : '서울 거주자 우선이라 당첨이 어려워요') : '공고 지역 거주자 우선', it.agency === 'SH' && h.residence?.sido !== '서울' ? 'mid' : 'good');
+    incomeCheck(dual ? L.incomePctSmallDual : L.incomePctSmall, '소득(60㎡ 이하)');
+    push('소득(60㎡ 초과)', `기준 ${Math.round((dual ? L.incomePctMidDual : L.incomePctMid) * 100)}% = ${won(urban * (dual ? L.incomePctMidDual : L.incomePctMid))}`, inc && inc <= urban * (dual ? L.incomePctMidDual : L.incomePctMid) ? 'good' : 'mid');
+    push('자산', `총자산 ${won(A.total)} · 장기전세 자산 기준은 공고마다 달라요 → 공고문 확인`, 'mid');
+    if (married7) push('신혼 우선', '혼인 7년 이내라 신혼부부 우선공급(미리내집) 대상일 수 있어요', 'good');
+  } else if (type === '청년안심주택') {
+    const youth = age != null && age >= 19 && age <= 39;
+    push('계층', youth ? `청년(만 ${age}세)·신혼부부 대상 → ${married7 ? '신혼부부로 신청 가능' : '청년으로 신청 가능'}` : married7 ? '신혼부부 유형으로 신청 가능' : '만 19~39세 청년·신혼부부 대상', youth || married7 ? 'good' : 'bad');
+    push('소득·자산', '공공임대분·민간임대분 기준이 달라요 → 공고문 확인', 'mid');
+  } else if (type === '공공지원민간임대') {
+    push('자격', '일반공급은 무주택이면 소득 상관없이 신청 가능. 특별공급(청년·신혼 등)은 소득 120% 등 기준 있음', 'good');
+  } else {
+    push('자격', '세부 자격은 공고문 확인', 'mid');
+  }
+  const bad = checks.filter(c => c.s === 'bad');
+  const status = bad.length ? '불가' : checks.some(c => c.s === 'mid') ? '경계' : '가능';
+  return { status, checks, size, totalAsset: A.total };
+}
+export function rentalTag(e) {
+  if (!e || e.status === '확인 필요') return null;
+  if (e.status === '불가') return { icon: '❌', text: '자격 미달', why: [...new Set(e.checks.filter(c => c.s === 'bad').map(c => c.k))].join('·') };
+  if (e.status === '가능') return { icon: '✅', text: '자격 됨', why: '' };
+  return { icon: '⚠️', text: '확인 필요', why: [...new Set(e.checks.filter(c => c.s === 'mid').map(c => c.k))].slice(0, 2).join('·') };
+}
+
+/** 임대 점수: 출퇴근 50 · 매매 가격대 20 · 입지 20 · SNS 10 (사용자 비율 가능) */
+export function rentalFit(it, weights) {
+  const W = normRentalWeights(weights);
+  const sc = (frac, max) => Math.round(Math.max(0, Math.min(1, frac)) * max * 10) / 10;
+  const parts = [];
+  const c = it.commute?.avg;
+  const cv = c == null ? 0.2 : c <= 20 ? 1 : c <= 30 ? 0.87 : c <= 40 ? 0.6 : c <= 45 ? 0.47 : c <= 60 ? 0.2 : 0;
+  parts.push({ k: '출퇴근', v: sc(cv, W.commute), max: W.commute, why: c == null ? '경로 계산 안 됨' : `평균 ${c}분 · 20분 이내 만점` });
+  // 주변 아파트 매매가 수준: 평당 1,500만 0점 → 5,000만 만점 (비싼 동네일수록 입지가 좋다고 본다)
+  const pp = it.priceLevel?.perPyeong;
+  const pv = pp ? (pp - 1.5e7) / 3.5e7 : 0.3;
+  parts.push({ k: '매매 가격대', v: sc(pv, W.price), max: W.price, why: pp ? `주변 아파트 평당 ${won(pp)}${it.priceLevel.at59 ? ` (59㎡ 약 ${won(it.priceLevel.at59)})` : ''} · 평당 5,000만 이상 만점` : '주변 거래 부족 → 기본 30%' });
+  const L = it.location || {};
+  const st = L.subway?.[0]?.m, el = L.elementary?.[0]?.m, ac = L.academies1km ?? 0;
+  const sv = st == null ? 0 : st <= 500 ? 10 : st <= 800 ? 8 : st <= 1200 ? 5 : st <= 2000 ? 2 : 0;
+  const ev = (el == null ? 0 : el <= 300 ? 5 : el <= 600 ? 4 : el <= 1000 ? 2 : 0) + (ac >= 100 ? 5 : ac >= 50 ? 4 : ac >= 20 ? 3 : ac >= 5 ? 1 : 0);
+  parts.push({ k: '입지', v: sc(it.geo ? (sv + ev) / 20 : 0.2, W.location), max: W.location, why: it.geo ? `역 ${st != null ? st.toLocaleString() + 'm' : '2km 밖'} · 초교 ${el != null ? el + 'm' : '-'} · 학원 ${ac}곳` : '위치 확인 안 됨' });
+  const bz = it.buzzLevel ?? 0;
+  parts.push({ k: 'SNS 화제', v: sc([0, 0.6, 1][bz], W.buzz), max: W.buzz, why: ['언급 보통', '언급 많음', '언급 매우 많음'][bz] });
+  return { total: Math.round(parts.reduce((s, p) => s + p.v, 0)), parts, weights: W };
+}
