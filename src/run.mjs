@@ -194,7 +194,10 @@ for (const it of items) {
 }
 
 // ── 임대 (행복주택·국민임대·장기전세 등) ──
-const rentalShort = n => n.replace(/^\[[^\]]*\]\s*/, '').replace(/\(\s*20\d{2}[.\-]\s*\d{1,2}[.\-]\s*\d{1,2}\.?\s*\)/g, '').replace(/['‘’]?\d{2}년\s*\d{1,2}월\s*/, '')
+// 카드에 유형 배지가 따로 있으니 이름에서 유형·모집 문구·앞쪽 (지역) 괄호를 뺀다
+const rentalShort = n => rentalShort0(n).replace(/^\([^)]*\)\s*/, '').replace(/\s*(입주자\s*및\s*)?예비\s*입주자.*$|\s*입주자\s*모집.*$/, '')
+  .replace(/\s*(국민임대|국임임대|영구임대|행복|통합공공임대|장기전세|공공임대)(주택)?(\s*\[리츠\])?\s*$/, '').replace(/\(\d+형\)/, '').replace(/\s*지역(\s*\d+년)?$/, '').replace(/\s*(\d+년)$/, '').trim() || rentalShort0(n);
+const rentalShort0 = n => n.replace(/^\[[^\]]*\]\s*/, '').replace(/\(\s*20\d{2}[.\-]\s*\d{1,2}[.\-]\s*\d{1,2}\.?\s*\)/g, '').replace(/['‘’]?\d{2}년\s*\d{1,2}월\s*/, '')
   .replace(/(입주자\s*및\s*)?예비\s*입주자\s*모집\s*공고(문)?|입주자\s*모집\s*공고(문)?|모집\s*공고(문)?|모집$/g, '').replace(/\s+/g, ' ').trim();
 function rentalQuery(r) {
   const inParen = (r.name.match(/\(([^)]*(아파트|단지|자이|힐스|푸르지오|래미안|e편한|센트럴|파크|마을|타운)[^)]*)\)/) || [])[1];
