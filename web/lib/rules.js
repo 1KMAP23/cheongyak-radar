@@ -225,7 +225,9 @@ export function fitScore(it, weights) {
   const good = rows.filter(r => r.reliable !== false).sort((a, b) => b.margin - a.margin)[0];
   const m = good ? good.margin : null;
   let mv, mwhy;
-  if (!good && rows.length) { mv = 0.15; mwhy = `${rows.map(r => `${Math.round(r.area)}㎡ ${won(r.margin)}`).join('·')}로 나왔지만 시세 비교 신뢰도가 낮아 불확실로 처리`; }
+  const exp = (it.market || []).filter(r => r.expMargin != null && (Math.abs(r.area - 59) <= 8 || Math.abs(r.area - 84) <= 8)).sort((a, b) => b.expMargin - a.expMargin)[0];
+  if (!good && exp) { mv = exp.expMargin / 3e8; mwhy = `${Math.round(exp.area)}㎡ ${exp.expMargin >= 0 ? '+' : ''}${won(exp.expMargin)} (예상치: ${exp.expected.source})`; }
+  else if (!good && rows.length) { mv = 0.15; mwhy = `${rows.map(r => `${Math.round(r.area)}㎡ ${won(r.margin)}`).join('·')}로 나왔지만 시세 비교 신뢰도가 낮아 불확실로 처리`; }
   else if (!good) { mv = 0.15; mwhy = '비교할 거래가 부족해 시세 불확실'; }
   else {
     mv = m / 3e8;
@@ -402,5 +404,6 @@ export function sizeInfo(it, target) {
   const near = ms.length ? Math.min(...ms.map(m => Math.abs(m.exclusiveArea - target))) : null;
   const same = ms.filter(m => Math.abs(m.exclusiveArea - target) === near);
   const lo = same.length ? Math.min(...same.map(m => m.topPrice)) : row.price, hi = same.length ? Math.max(...same.map(m => m.topPrice)) : row.price;
-  return { area: row?.area ?? Math.round(same[0].exclusiveArea * 10) / 10, lo, hi, margin: row?.margin ?? null, estimate: row?.comp?.estimate ?? null, reliable: row ? row.reliable !== false : true, method: row?.comp?.method, thin: row?.comp?.status === '거래 부족' };
+  return { area: row?.area ?? Math.round(same[0].exclusiveArea * 10) / 10, lo, hi, margin: row?.margin ?? null, estimate: row?.comp?.estimate ?? null, reliable: row ? row.reliable !== false : true, method: row?.comp?.method, thin: row?.comp?.status === '거래 부족',
+    expected: row?.expected || null, expMargin: row?.expMargin ?? null };
 }

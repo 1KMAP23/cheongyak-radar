@@ -170,3 +170,4 @@ details summary{cursor:pointer;margin-top:10px;color:var(--accent);font-size:.88
 .rk{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;min-width:0;flex:0 0 24px;border:1px solid var(--line);line-height:1}.rk.top{border-color:var(--accent)}
 .sub-grid{display:grid;gap:10px}.sub-grid[hidden]{display:none}
 .newb{font-size:.66rem;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:0 4px;vertical-align:2px}
+.exp{font-style:normal;font-size:.62rem;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 3px;margin-left:3px;vertical-align:2px}

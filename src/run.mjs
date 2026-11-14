@@ -5,6 +5,7 @@ import { collectApplyhome } from './collect/applyhome.mjs';
 import { collectLH, crossCheck } from './collect/lh.mjs';
 import { makeKakao } from './collect/kakao.mjs';
 import { comparables } from './collect/molit.mjs';
+import { makeExpected } from './analyze/expected.mjs';
 import { NON_APT } from '../web/lib/rules.js';
 import { eligibility, invest, commuteVerdict, overall, acquisitionTax, category, CATEGORY_LABEL, fitScore, eligibilityTag, placeLabel, shortName, marginHot, TH } from './analyze/judge.mjs';
 import { buzz, hotLevel } from './collect/buzz.mjs';
@@ -115,6 +116,7 @@ const PREV = await previousIds();
 report.previousAt = PREV?.at || null;
 
 // ── 분석 ──
+const expectedPrice = makeExpected({ key: KEY, kakao, from });
 for (const it of items) {
   const out = { ...it, category: category(it), categoryLabel: CATEGORY_LABEL[category(it)] };
   try {
@@ -151,13 +153,20 @@ for (const it of items) {
         const ratio = comp.estimate ? comp.estimate / m.topPrice : null;
         // 이 평형 마진을 믿을 수 있나: 단지 간 편차, 시세/분양가 비율 0.6~1.6배
         const reliable = margin != null && comp.reliable !== false && ratio >= 0.6 && ratio <= 1.6;
-        out.market.push({ type: m.type, area: Math.round(m.exclusiveArea * 10) / 10, pyeong: m.pyeong, price: m.topPrice, tax, balcony, comp, margin, reliable });
+        const row = { type: m.type, area: Math.round(m.exclusiveArea * 10) / 10, pyeong: m.pyeong, price: m.topPrice, tax, balcony, comp, margin, reliable };
+        // 실거래로 믿을 만한 시세가 없으면(신도시 등) 주변 민간 신축 분양가로 '예상 시세'를 붙인다
+        if (!reliable && (comp.status === '거래 부족' || !comp.estimate)) {
+          const ex = await expectedPrice(it, geo, m.exclusiveArea);
+          if (ex?.estimate) { row.expected = ex; row.expMargin = ex.estimate - m.topPrice - tax - balcony; }
+        }
+        out.market.push(row);
       }
     }
   } catch (e) {
     out.analysisError = String(e.message || e);
   }
   out.invest = invest(it, { models: it.models, location: out.location, market: out.market });
+  for (const r of (out.market || []).filter(r => r.expected)) out.invest.notes.push({ k: `예상 시세 ${Math.round(r.area)}㎡`, v: `${(r.expected.estimate / 1e8).toFixed(2)}억 (예상치, ${r.expected.source}${r.expected.refs?.length ? ': ' + r.expected.refs.map(x => `${x.name} ${(x.atArea / 1e8).toFixed(2)}억`).join(', ') : ''}) → 예상 마진 ${r.expMargin >= 0 ? '+' : ''}${(r.expMargin / 1e8).toFixed(2)}억. 실거래가 아니라 주변 새 아파트 분양가로 잡은 기대치예요`, s: 'mid' });
   try { out.buzz = await buzz(kakao, out); } catch (e) { out.buzz = null; }
   try { out.competition = await competition(KEY, it); } catch (e) { out.competition = null; }
   // 시장 반응으로 검산: 마진이 1억 넘게 나왔는데 경쟁률이 2:1도 안 되면 시세 추정이 과대했을 가능성이 크다
@@ -183,6 +192,7 @@ if (competitionStatus()) report.notices = [competitionStatus()];
 // 분석 실패 감시: 위치를 찾은 공고 중 시세 분석이 깨진 게 많으면 앱 상단에 경고
 const failed = report.items.filter(i => i.analysisError);
 if (failed.length >= 3) report.warnings.push(`분석 오류 ${failed.length}건: ${failed[0].analysisError}`);
+for (const i of report.items) for (const r of i.market || []) if (r.expected) console.log(`예상 시세 ${i.shortName} ${Math.round(r.area)}㎡: ${(r.expected.estimate / 1e8).toFixed(2)}억 (${r.expected.source}${r.expected.refs?.length ? ': ' + r.expected.refs.map(x => `${x.name} ${(x.atArea / 1e8).toFixed(2)}억 ${(x.m / 1000).toFixed(1)}km`).join(', ') : ''}) → 예상 마진 ${(r.expMargin / 1e8).toFixed(2)}억`);
 // 시세 검산 로그 (공공데이터로 만든 값만, 세대 정보 없음)
 for (const i of report.items.filter(i => i.propertyType || i.mixedUse)) console.log(`유형 ${i.shortName}: ${i.propertyType || '주상복합 추정'} ${i.mixedUse || ''}`);
 for (const i of report.items.filter(i => i.market?.length)) console.log(`시세 ${i.place}|${i.shortName}|🔥${i.hot}|${i.invest.verdict} ` + i.market.map(m => `${Math.round(m.area)}㎡ ${(m.price / 1e8).toFixed(2)}→${m.comp.estimate ? (m.comp.estimate / 1e8).toFixed(2) : '-'} 마진${m.margin != null ? (m.margin / 1e8).toFixed(2) : '-'}${m.reliable ? '' : '?'} n${m.comp.sample ?? 0} ${m.comp.method || ''}`).join(' / '));

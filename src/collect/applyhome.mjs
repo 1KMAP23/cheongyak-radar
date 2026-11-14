@@ -143,3 +143,17 @@ export async function collectApplyhome({ key, from, to, sinceDays = 60, log = co
 
   return { items, stats };
 }
+
+/** 최근 N개월 수도권 민영 아파트 분양 공고 (예상 시세 기준점용) */
+export async function recentPrivate({ key, from, months = 18 }) {
+  const since = new Date(Date.parse(from) - months * 30.4 * 864e5).toISOString().slice(0, 10);
+  const { rows } = await all(OPS.apt.detail, key, { 'cond[RCRIT_PBLANC_DE::GTE]': since });
+  return rows.filter(r => METRO.has(r.SUBSCRPT_AREA_CODE_NM) && r.HOUSE_DTL_SECD_NM === '민영')
+    .map(r => ({ houseManageNo: r.HOUSE_MANAGE_NO, name: r.HOUSE_NM, address: r.HSSPLY_ADRES, noticeDate: d(r.RCRIT_PBLANC_DE) }));
+}
+/** 공고 하나의 주택형별 전용면적·최고 분양가 */
+export async function modelsOf(key, houseManageNo) {
+  const { rows } = await all(OPS.apt.model, key, { 'cond[HOUSE_MANAGE_NO::EQ]': houseManageNo });
+  return rows.map(m => ({ area: parseFloat(m.HOUSE_TY) || null, topPrice: m.LTTOT_TOP_AMOUNT ? parseInt(String(m.LTTOT_TOP_AMOUNT).replace(/,/g, ''), 10) * 10000 : null }))
+    .filter(m => m.area && m.topPrice);
+}
