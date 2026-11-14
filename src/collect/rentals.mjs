@@ -11,7 +11,7 @@ const TYPE_RE = [
   ['통합공공임대', /통합공공임대/], ['장기전세', /장기전세|미리내집|시프트/], ['청년안심주택', /청년안심주택|역세권\s*청년/],
   ['공공임대', /(10|5|50)년\s*공공임대|분양전환|공공임대주택/], ['재개발임대', /재개발임대/],
 ];
-const SKIP = /매입임대|전세임대|희망하우징|기숙사|두레|사회주택|상가|어린이집|발표|결과|당첨|서류|안내문|입주안내|계약|명단|추첨|연기|취소|휴무|공동생활|수칙|선정|감정평가|설명회|정정\s*안내|재공고\s*안내|임대료\s*인상|갱신/;
+const SKIP = /기관공급|기관추천|중소기업체|매입임대|전세임대|희망하우징|기숙사|두레|사회주택|상가|어린이집|발표|결과|당첨|서류|안내문|입주안내|계약|명단|추첨|연기|취소|휴무|공동생활|수칙|선정|감정평가|설명회|정정\s*안내|재공고\s*안내|임대료\s*인상|갱신/;
 const typeOf = t => TYPE_RE.find(([, re]) => re.test(t))?.[0] || null;
 const ymd = s => (s ? s.replace(/\./g, '-').replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null);
 const compact = s => s.replace(/-/g, '');
@@ -48,7 +48,7 @@ async function lh({ key, from, log }) {
   const out = [];
   for (const r of rows) {
     const type = LH_TYPES[r.AIS_TP_CD];
-    if (!type || !METRO.test(r.CNP_CD_NM) || r.PAN_SS === '접수마감') continue;
+    if (!type || !METRO.test(r.CNP_CD_NM) || r.PAN_SS === '접수마감' || /기관공급|기관추천|중소기업체/.test(r.PAN_NM)) continue;
     const end = ymd(r.CLSG_DT);
     if (!end || end < from) continue;
     out.push({ source: 'lh', agency: 'LH', id: `lh-${r.PAN_ID}`, name: r.PAN_NM.replace(/^\[정정공고\]\s*/, '').trim(), rentalType: type,
@@ -87,6 +87,7 @@ async function sh({ from, log }) {
       noticeDate: r.date, window: w || { start: r.date, end: null }, endUnknown: !w, noticeUrl: url });
   }
   log(`[임대] SH 주택임대 게시글 ${rows.length} / 아파트 임대 모집 진행중 ${out.length}`);
+  log(`[임대] SH 최근 제목: ${rows.slice(0, 25).map(r => `${r.date} ${r.title}`).join(' | ')}`);
   return out;
 }
 
