@@ -39,26 +39,26 @@ export function saleComment(it, { today = new Date().toISOString().slice(0, 10) 
   const stTxt = st ? (st.m <= 300 ? `초역세권(${st.name} ${st.m}m)` : st.m <= 800 ? `역세권(${st.name} ${st.m}m)` : st.m <= 1500 ? `${st.name} ${(st.m / 1000).toFixed(1)}km` : '') : '';
   let kind;
   if (land) kind = `토지임대부 분양 · 건물만 소유하고 토지는 공공(LH·SH) 소유, 매달 토지임대료`;
-  else if (it.category === 'noRank') kind = `줍줍(무순위) ${units ? `잔여 ${units}세대` : ''} · 무주택이면 통장 없이 추첨`;
-  else if (it.category === 'arbitrary') kind = `임의공급${it.invest?.repeated ? ` ${it.invest.repeated}차` : ''} ${units ? `${units}세대` : ''} · 통장·주택 수 상관없이 선착순/추첨`;
+  else if (it.category === 'noRank') kind = '줍줍(무순위) · 무주택이면 통장 없이 추첨';
+  else if (it.category === 'arbitrary') kind = `임의공급${it.invest?.repeated ? ` ${it.invest.repeated}차` : ''} · 통장·주택 수 상관없이 선착순/추첨`;
   else if (it.category === 'newlywedHopeTown') kind = `신혼희망타운 · 신혼·예비신혼·한부모 전용, 시세 차익 일부를 LH와 나누는 수익공유형`;
   else if (it.category === 'publicSale') kind = `공공분양${f.priceCap ? '(분양가상한제)' : ''} · 소득·자산 기준 있는 대신 분양가가 낮은 편`;
   else if (it.category === 'urban') kind = `도시형생활주택 · 아파트가 아닌 소형 주택(주택 수에는 포함)`;
-  else kind = `민영 분양${f.priceCap ? '(분양가상한제)' : ''}${units ? ` ${units.toLocaleString()}세대` : ''}`;
+  else kind = `민영 분양${f.priceCap ? '(분양가상한제)' : ''}`;
   const head = [where, stTxt, brand ? `${brand} 브랜드` : (units && units < 300 && !few ? '비브랜드 소단지' : '')].filter(Boolean).join(' · ');
   const line1 = `${head} — ${kind.trim()}`;
 
   // ── 2줄: 가격 ──
   let line2, priceView = 'unknown';
-  if (land) { line2 = `분양가에 땅값이 빠져 있어 주변 아파트 시세와 비교하는 의미가 작아요. ${r ? `${r.area}㎡ ${won(r.hi)}으로 같은 동네 아파트의 절반 이하인 경우가 많아요` : ''}`; priceView = 'land'; }
+  if (land) { line2 = '분양가에 땅값이 빠져 있어 같은 동네 아파트의 절반 이하인 경우가 많아요. 대신 주변 시세와 비교하는 의미는 작아요'; priceView = 'land'; }
   else if (r?.marginHi != null && r.reliable !== false && !r.expected) {
     const pct = r.estimate ? Math.round(r.hi / r.estimate * 100) : null;
     priceView = r.marginHi >= 2e8 ? 'cheap' : r.marginHi >= 5e7 ? 'some' : r.marginHi >= -3e7 ? 'fair' : 'pricey';
-    line2 = `${r.area}㎡ ${won(r.hi)}, 주변 실거래 시세 ${won(r.estimate)}${pct ? `(분양가가 시세의 ${pct}%)` : ''} → 안전마진 ${sgnWon(r.marginHi)}. ${{ cheap: '시세보다 확실히 싸요', some: '약간의 안전마진이 있어요', fair: '사실상 시세 수준 분양이에요', pricey: '주변 시세보다 비싸게 나왔어요' }[priceView]}`;
+    line2 = `${{ cheap: '주변 실거래 시세보다 확실히 싸게 나왔어요', some: '주변 실거래 시세보다 조금 싸요', fair: '주변 실거래 시세와 거의 같은, 사실상 시세 수준 분양이에요', pricey: '주변 실거래 시세보다 비싸게 나왔어요' }[priceView]}${pct ? ` (분양가가 시세의 ${pct}% 수준)` : ''}`;
   } else if (r?.expected && r.marginHi != null) {
     priceView = r.marginHi >= 1e8 ? 'some' : r.marginHi >= -3e7 ? 'fair' : 'pricey';
-    line2 = `주변에 비교할 새 아파트 거래가 없어 인근 민간 신축 분양가로 본 예상 시세 ${won(r.estimate)} 대비 ${sgnWon(r.marginHi)}(예상). 입주 후 시세는 교통·상권이 얼마나 갖춰지느냐에 달렸어요`;
-  } else if (r) line2 = `${r.area}㎡ ${won(r.hi)}. 주변 비교 거래가 적거나 들쭉날쭉해 시세 판단이 어려워요 — 인근 신축 시세를 직접 비교해 보세요`;
+    line2 = `주변에 비교할 새 아파트 거래가 없어 인근 민간 신축 분양가로 가늠하면 ${r.marginHi >= 3e7 ? '조금 싼' : r.marginHi >= -3e7 ? '비슷한' : '오히려 비싼'} 수준이에요(예상치). 입주 후 시세는 교통·상권이 얼마나 갖춰지느냐에 달렸어요`;
+  } else if (r) line2 = '주변 비교 거래가 적거나 들쭉날쭉해 시세 판단이 어려워요 — 인근 신축 시세를 직접 비교해 보세요';
   else line2 = '공고 데이터에 주택형·분양가가 없어요. 공고문에서 가격을 확인하세요';
 
   // ── 장점·단점 ──
@@ -125,7 +125,7 @@ export function rentalComment(it) {
   if (/예비입주자/.test(it.name)) cons.push('예비입주자 모집 — 당첨돼도 빈집이 날 때까지 대기');
   if (it.analysisNote && /여러 단지/.test(it.analysisNote)) cons.push('여러 단지 묶음 공고 — 단지별 위치 확인 필요');
   const line1 = `${t} — ${ABOUT[t] || '공공임대'}`;
-  const line2 = pl?.at59 ? `주변 아파트 59㎡ 매매가 약 ${won(pl.at59)}(평당 ${won(pl.perPyeong)}) 동네. 임대료·보증금은 공고문에서 확인하세요` : '주변 매매 시세 정보가 적어요. 임대료·보증금은 공고문에서 확인하세요';
+  const line2 = pl?.perPyeong ? `${pl.perPyeong >= 4e7 ? '집값이 높은 선호 지역이라 같은 돈으로 좋은 입지에 살 수 있어요' : pl.perPyeong >= 2.5e7 ? '집값이 중간 이상인 동네예요' : '집값이 낮은 편인 동네예요'}. 임대료·보증금은 공고문에서 확인하세요` : '주변 매매 시세 정보가 적어요. 임대료·보증금은 공고문에서 확인하세요';
   let line3;
   if (it.eligibility?.status === '불가') line3 = `우리 집은 ${it.eligTag?.why || '기준'} 때문에 자격이 안 돼요${/총자산/.test(it.eligTag?.why || '') ? ' — 자산 기준이 바뀌거나 아이가 생기면 다시 확인해 보세요' : ''}`;
   else if (t === '장기전세') line3 = '월세 부담 없이 오래 살 수 있는 실거주용으로 가장 매력적인 임대예요. 자산 기준만 공고문에서 확인하세요';

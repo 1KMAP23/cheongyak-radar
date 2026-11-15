@@ -217,3 +217,12 @@ details summary{cursor:pointer;margin-top:10px;color:var(--accent);font-size:.88
 .verdict-box p.mine{margin:2px 0 0;font-size:.76rem;color:var(--muted)}
 .verdict-box.plain{background:var(--bg);border:1px solid var(--line)}
 .review p.cl{margin:0 0 6px;line-height:1.55}.review p.cl.key{font-weight:700;color:var(--accent)}
+/* 대표 평형 크게 */
+.mains{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:8px}
+.mt{border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:grid;gap:2px;background:var(--surface);min-width:0}
+.mt .a{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.mt .a b{font-size:1rem}
+.mt .a small{font-size:.72rem;color:var(--muted)}
+.mt .p{font-size:1.2rem;letter-spacing:-.02em;white-space:nowrap}
+.mt .m{font-size:.84rem;font-weight:600;white-space:nowrap}
+.mt .m.good{color:var(--good)}.mt .m.mid{color:var(--warn)}.mt .m.bad{color:var(--bad)}

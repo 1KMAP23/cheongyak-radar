@@ -301,6 +301,19 @@ function placeFull(it) {
 }
 const units = it => it.totalUnits ? (['noRank', 'arbitrary'].includes(it.category) ? `잔여 ${it.totalUnits}세대` : `공급 ${it.totalUnits.toLocaleString()}세대`) : '';
 /** 대표 평형: 84㎡ → 59㎡ → 세대수가 가장 많은 타입 */
+/** 카드 대표 평형: 59·84㎡가 있으면 그것, 없으면 세대수 많은 순으로 최대 2개 */
+function mainTypes(it) {
+  const rows = typeRows(it);
+  const pick = [rows.find(r => r.area >= 57 && r.area <= 61), rows.find(r => r.area >= 82 && r.area <= 86)].filter(Boolean);
+  for (const r of rows.slice().sort((a, b) => (b.units || 0) - (a.units || 0))) { if (pick.length >= 2) break; if (!pick.includes(r)) pick.push(r); }
+  return { pick: pick.sort((a, b) => a.area - b.area), more: rows.length - pick.length };
+}
+function mainBox(it) {
+  const { pick, more } = mainTypes(it);
+  if (!pick.length) return '<p class="sub types-none">주택형·분양가 정보 없음 (공고문 확인)</p>';
+  const price = r => r.lo === r.hi ? won(r.hi) : `${won(r.lo).replace('억', '')}~${won(r.hi)}`;
+  return `<div class="mains">${pick.map(r => `<div class="mt"><div class="a"><b class="mono">${r.area}㎡</b><small>${r.pyeong ? `${Math.round(r.pyeong)}평` : ''}${r.units ? ` · ${r.units}세대` : ''}</small></div><b class="p mono">${price(r)}</b><span class="m mono ${r.marginHi == null ? '' : r.reliable === false ? 'mid' : mtone(r.marginHi)}">${r.marginHi == null ? '시세 ?' : `마진 ${sgn(r.marginHi)}${r.reliable === false ? '?' : ''}`}${r.expected ? '<i class="exp">예상</i>' : ''}</span></div>`).join('')}</div>${more > 0 ? `<p class="sub more-types">외 ${more}개 평형 · 눌러서 전체 보기</p>` : ''}`;
+}
 function repType(it) {
   const rows = typeRows(it);
   return rows.find(r => r.area >= 82 && r.area <= 86) || rows.find(r => r.area >= 57 && r.area <= 61) || rows.slice().sort((a, b) => (b.units || 0) - (a.units || 0))[0] || null;
@@ -336,8 +349,8 @@ function card(it) {
   const n = typeRows(it).length;
   return `<a class="card" href="#item=${encodeURIComponent(it.id)}">
     <div class="row"><span class="rk mono${it.rank <= 3 ? ' top' : ''}">${it.rank}</span><span class="nm">${isNew(it) ? '<span class="newb">NEW</span> ' : ''}${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}<span class="place">(${esc(placeFull(it))})</span> ${esc(it.shortName || it.name)}${units(it) ? ` <small class="units">${esc(units(it))}</small>` : ''}</span><span class="fit mono" title="나에게 맞는 점수">${it.fit.total}<small>점</small></span></div>
+    ${mainBox(it)}
     <div class="verdict-box ${vt}"><div class="vh"><b>${vi} ${vl}</b><span class="stars" aria-label="${stars(it)}점">${'★'.repeat(Math.floor(stars(it)))}${stars(it) % 1 ? '½' : ''}<i>${'★'.repeat(5 - Math.ceil(stars(it)))}</i></span></div>${(cm => cm.lines.map((l, i) => `<p class="cl${i === 2 ? ' key' : ''}">${esc(l)}</p>`).join(''))(saleComment(it, { today: R.today }))}<p class="mine">나에게: ${esc(mineLine(it))}</p></div>
-    ${r ? `<div class="rep"><span class="mono"><b>${r.area}㎡</b>${r.pyeong ? ` <small>${Math.round(r.pyeong)}평</small>` : ''}${r.units ? ` <small>${r.units}세대</small>` : ''}</span><span class="mono">${r.lo === r.hi ? won(r.hi) : `${won(r.lo).replace('억', '')}~${won(r.hi)}`}</span><b class="mono ${r.marginHi == null ? '' : r.reliable === false ? 'mid' : mtone(r.marginHi)}">${r.marginHi == null ? '시세 ?' : sgn(r.marginHi) + (r.reliable === false ? '?' : '')}${r.expected ? '<i class="exp">예상</i>' : ''}</b></div>${n > 1 ? `<p class="sub more-types">외 ${n - 1}개 평형 · 눌러서 전체 보기</p>` : ''}` : '<p class="sub types-none">주택형·분양가 정보 없음 (공고문 확인)</p>'}
     ${it.eligTag || it.overBudget || kindTag(it) ? `<div class="tags">${kindTag(it)}${etag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
     <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${dueTag(it)}<span>${esc(schedLine(it))}</span>${c ? `<span class="${tone(it.commuteResult.verdict)}-t">🚗 ${c}분</span>` : ''}</div>
   </a>`;
