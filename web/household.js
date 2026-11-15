@@ -132,8 +132,9 @@ export function householdView(opts) {
 
     <section class="panel"><h2>다른 기기로 옮기기</h2>
       <p class="sub">아래 코드를 복사해서 다른 기기의 같은 칸에 붙여 넣고 가져오기를 누르세요.</p>
-      <textarea id="json">${esc(current ? JSON.stringify(current) : '')}</textarea>
-      <div class="actions" style="margin-top:8px"><button id="copy">코드 복사</button><button id="import">붙여 넣은 코드 가져오기</button></div>
+      <textarea id="json" placeholder="여기에 코드를 붙여 넣으면 바로 위 칸에 채워져요"></textarea>
+      <div class="actions" style="margin-top:8px"><button id="import">붙여 넣은 코드 가져오기</button><button id="copy">내 설정 코드 복사</button></div>
+      <p class="err" id="json-err" style="margin-top:6px"></p>
     </section>
 
     <section class="panel"><h2>이 기기</h2><p class="sub">비밀번호를 지우면 다음에 다시 물어봐요.</p><p style="margin-top:8px"><button id="forget">비밀번호 지우기</button></p></section>
@@ -221,15 +222,25 @@ export function householdView(opts) {
   };
   $('reset').onclick = () => { $('hh-err').textContent = '정말 지우려면 한 번 더 누르세요.'; $('reset').onclick = () => onSave(null); };
   $('copy').onclick = async () => { const t = $('json'); t.value = JSON.stringify(merged()); try { await navigator.clipboard.writeText(t.value); $('copy').textContent = '복사됨'; } catch { t.select(); } };
-  $('import').onclick = () => {
-    // 가져온 값을 바로 저장하지 않고 위 입력칸에 채워서 보여 준다 → 확인·수정 후 저장
-    try {
-      const x = JSON.parse($('json').value.trim().replace(/[“”]/g, '"').replace(/[‘’]/g, "'"));
-      if (!x || typeof x !== 'object') throw 0;
-      x.prefs = { regions: ['서울', '경기', '인천'], workplace: workplaces[0]?.id || null, ...(x.prefs || {}) };
-      householdView({ ...opts, current: x, notice: '코드를 불러와 아래 칸에 채웠어요. 확인·수정한 뒤 맨 아래 [저장하고 목록 보기]를 눌러야 적용돼요.' });
-      window.scrollTo(0, 0);
+  // 붙여 넣은 글에서 설정 코드({ ... })만 찾아낸다. 앞뒤 글자·예전 코드가 섞여 있거나 둥근 따옴표여도 된다
+  function findCode(raw) {
+    const t = raw.replace(/[“”″]/g, '"').replace(/[‘’]/g, "'").replace(/\u00a0/g, ' ');
+    const opens = [...t.matchAll(/\{/g)].map(m => m.index), closes = [...t.matchAll(/\}/g)].map(m => m.index).reverse();
+    let best = null;
+    for (const i of opens) for (const j of closes) {
+      if (j <= i) break;
+      try { const x = JSON.parse(t.slice(i, j + 1)); if (x && typeof x === 'object' && (x.assets || x.prefs || x.marriageDate || x.applicantInfo)) { if (!best || j - i > best.len) best = { x, len: j - i }; break; } } catch {}
     }
-    catch { $('hh-err').textContent = '코드 형식이 맞지 않아요. 복사한 코드를 그대로 붙여 넣어 주세요.'; }
-  };
+    return best?.x || null;
+  }
+  function doImport() {
+    const x = findCode($('json').value);
+    if (!x) { $('json-err').textContent = '설정 코드를 찾지 못했어요. 받은 코드 전체({ 부터 } 까지)를 그대로 붙여 넣어 주세요.'; return; }
+    x.prefs = { regions: ['서울', '경기', '인천'], workplace: workplaces[0]?.id || null, ...(x.prefs || {}) };
+    // 바로 저장하지 않고 위 칸에 채워서 보여 준다 → 확인·수정 후 저장
+    householdView({ ...opts, current: x, notice: '코드를 불러와 아래 칸에 채웠어요. 확인·수정한 뒤 맨 아래 [저장하고 목록 보기]를 눌러야 적용돼요.' });
+    window.scrollTo(0, 0);
+  }
+  $('import').onclick = doImport;
+  $('json').addEventListener('paste', () => setTimeout(() => { if (findCode($('json').value)) doImport(); }, 50));
 }
