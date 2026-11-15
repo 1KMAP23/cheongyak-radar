@@ -1,7 +1,7 @@
 /* 청약 레이더: 남색 기본색 + 판정 색(초록·주황·빨강·보라 별) */
 :root{
   --bg:#f3f5f8; --surface:#fff; --ink:#18212e; --muted:#5b6676; --line:#dde2ea;
-  --accent:#24408c; --accent-soft:#e5ebf8;
+  --accent:#24408c; --accent-soft:#e5ebf8; --blue:#1d5fd6; --blue-soft:#e3edfc;
   --good:#1d7a4a; --good-soft:#e2f3ea; --warn:#9a6200; --warn-soft:#fbf0d9; --bad:#b0342c; --bad-soft:#f9e4e2;
   --star:#6b3fc4; --star-soft:#efe8fb; --off:#8a93a0;
   --sans:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo",system-ui,sans-serif;
@@ -10,7 +10,7 @@
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#10151d; --surface:#18202b; --ink:#e7ebf1; --muted:#9aa5b5; --line:#2b3442;
-  --accent:#8eaaf2; --accent-soft:#1f2a42;
+  --accent:#8eaaf2; --accent-soft:#1f2a42; --blue:#79a8ff; --blue-soft:#182640;
   --good:#5cc78f; --good-soft:#163024; --warn:#e2b257; --warn-soft:#33280f; --bad:#ef8077; --bad-soft:#3a1d1b;
   --star:#b49bf0; --star-soft:#2a2141; --off:#6c7684; color-scheme:dark}}
 *{box-sizing:border-box}
@@ -226,3 +226,14 @@ details summary{cursor:pointer;margin-top:10px;color:var(--accent);font-size:.88
 .mt .p{font-size:1.2rem;letter-spacing:-.02em;white-space:nowrap}
 .mt .m{font-size:.84rem;font-weight:600;white-space:nowrap}
 .mt .m.good{color:var(--good)}.mt .m.mid{color:var(--warn)}.mt .m.bad{color:var(--bad)}
+/* 대표 평형 칸: 마진 1억 미만 무색 · 1~2억 초록 · 2억 이상 파랑 */
+.mt.g{background:var(--good-soft);border-color:transparent}.mt.g .m{color:var(--good)}
+.mt.b{background:var(--blue-soft);border-color:transparent}.mt.b .m{color:var(--blue)}
+.mt.n .m{color:var(--muted)}
+/* 출퇴근 칸: 20분 미만 파랑 · 20~40분 초록 · 40분 초과 빨강 */
+.cbox{display:flex;justify-content:space-between;align-items:baseline;border-radius:10px;padding:6px 12px;font-size:.86rem;border:1px solid var(--line)}
+.cbox b{font-size:1rem}
+.cbox.b{background:var(--blue-soft);color:var(--blue);border-color:transparent}
+.cbox.g{background:var(--good-soft);color:var(--good);border-color:transparent}
+.cbox.r{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.cbox small{color:var(--muted);font-size:.74rem}

@@ -312,7 +312,8 @@ function mainBox(it) {
   const { pick, more } = mainTypes(it);
   if (!pick.length) return '<p class="sub types-none">주택형·분양가 정보 없음 (공고문 확인)</p>';
   const price = r => r.lo === r.hi ? won(r.hi) : `${won(r.lo).replace('억', '')}~${won(r.hi)}`;
-  return `<div class="mains">${pick.map(r => `<div class="mt"><div class="a"><b class="mono">${r.area}㎡</b><small>${r.pyeong ? `${Math.round(r.pyeong)}평` : ''}${r.units ? ` · ${r.units}세대` : ''}</small></div><b class="p mono">${price(r)}</b><span class="m mono ${r.marginHi == null ? '' : r.reliable === false ? 'mid' : mtone(r.marginHi)}">${r.marginHi == null ? '시세 ?' : `마진 ${sgn(r.marginHi)}${r.reliable === false ? '?' : ''}`}${r.expected ? '<i class="exp">예상</i>' : ''}</span></div>`).join('')}</div>${more > 0 ? `<p class="sub more-types">외 ${more}개 평형 · 눌러서 전체 보기</p>` : ''}`;
+  const cls = r => r.marginHi == null || r.reliable === false || r.marginHi < 1e8 ? 'n' : r.marginHi < 2e8 ? 'g' : 'b';
+  return `<div class="mains">${pick.map(r => `<div class="mt ${cls(r)}"><div class="a"><b class="mono">${r.area}㎡</b><small>${r.pyeong ? `${Math.round(r.pyeong)}평` : ''}${r.units ? ` · ${r.units}세대` : ''}</small></div><b class="p mono">${price(r)}</b><span class="m mono">${r.marginHi == null ? '시세 ?' : `마진 ${sgn(r.marginHi)}${r.reliable === false ? '?' : ''}`}${r.expected ? '<i class="exp">예상</i>' : ''}</span></div>`).join('')}</div>${more > 0 ? `<p class="sub more-types">외 ${more}개 평형 · 눌러서 전체 보기</p>` : ''}`;
 }
 function repType(it) {
   const rows = typeRows(it);
@@ -331,9 +332,15 @@ function verdictLine(it, r) {
   return parts.join(' · ');
 }
 /** 우리 집 기준 한 줄: 출퇴근·자격 */
+/** 출퇴근 칸: 20분 미만 파랑 · 20~40분 초록 · 40분 초과 빨강 */
+function commuteBox(it) {
+  const c = it.commute?.avg;
+  if (!c) return `<div class="cbox"><span>🚗 출퇴근</span><small>${esc(it.commuteResult?.text || '직장 미설정')}</small></div>`;
+  const cls = c < 20 ? 'b' : c <= 40 ? 'g' : 'r';
+  return `<div class="cbox ${cls}"><span>🚗 ${esc(R.wp?.name || '직장')}까지 <small>출근 ${it.commute.go?.min ?? '-'}분 · 퇴근 ${it.commute.back?.min ?? '-'}분</small></span><b class="mono">평균 ${c}분</b></div>`;
+}
 function mineLine(it) {
   const p = [];
-  if (it.commute?.avg) p.push(`출퇴근 ${it.commute.avg}분`); else p.push(it.commuteResult?.verdict === '확인 필요' ? '출퇴근 계산 전' : '출퇴근 -');
   p.push(it.eligTag ? `${it.eligTag.icon} ${it.eligTag.text}${it.eligTag.why ? `(${it.eligTag.why})` : ''}` : R.HH ? '✅ 자격 됨' : '자격은 설정 후 판정');
   return p.join(' · ');
 }
@@ -351,8 +358,9 @@ function card(it) {
     <div class="row"><span class="rk mono${it.rank <= 3 ? ' top' : ''}">${it.rank}</span><span class="nm">${isNew(it) ? '<span class="newb">NEW</span> ' : ''}${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}<span class="place">(${esc(placeFull(it))})</span> ${esc(it.shortName || it.name)}${units(it) ? ` <small class="units">${esc(units(it))}</small>` : ''}</span><span class="fit mono" title="나에게 맞는 점수">${it.fit.total}<small>점</small></span></div>
     ${mainBox(it)}
     <div class="verdict-box ${vt}"><div class="vh"><b>${vi} ${vl}</b><span class="stars" aria-label="${stars(it)}점">${'★'.repeat(Math.floor(stars(it)))}${stars(it) % 1 ? '½' : ''}<i>${'★'.repeat(5 - Math.ceil(stars(it)))}</i></span></div>${(cm => cm.lines.map((l, i) => `<p class="cl${i === 2 ? ' key' : ''}">${esc(l)}</p>`).join(''))(saleComment(it, { today: R.today }))}<p class="mine">나에게: ${esc(mineLine(it))}</p></div>
+    ${commuteBox(it)}
     ${it.eligTag || it.overBudget || kindTag(it) ? `<div class="tags">${kindTag(it)}${etag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
-    <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${dueTag(it)}<span>${esc(schedLine(it))}</span>${c ? `<span class="${tone(it.commuteResult.verdict)}-t">🚗 ${c}분</span>` : ''}</div>
+    <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${dueTag(it)}<span>${esc(schedLine(it))}</span></div>
   </a>`;
 }
 
