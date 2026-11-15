@@ -12,7 +12,8 @@ export async function workplaceId(addr) {
   return 'w-' + [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
 }
 
-export function householdView({ app, esc, workplaces, current, onSave, push, onForget, canShare }) {
+export function householdView(opts) {
+  const { app, esc, workplaces, current, onSave, push, onForget, canShare, notice } = opts;
   const h = current || { prefs: { regions: ['서울', '경기', '인천'], workplace: workplaces[0]?.id || '' }, homeless: true };
   const v = (x, d = '') => (x == null ? d : esc(x));
   const m = x => (x == null || x === '' ? '' : Math.round(x / MAN));
@@ -40,6 +41,7 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
   const custom = !!h.prefs?.workplaceAddress;
   app.innerHTML = `<div class="wrap hh">
     <a class="btn back" href="#">← 목록</a>
+    ${notice ? `<div class="banner info" id="notice"><b>${esc(notice)}</b></div>` : ''}
     <div><h1>설정</h1><p class="sub">우리 집 정보를 넣으면 자격(❌·⚠️)과 추천 순위가 우리 집 기준으로 바뀌어요. 모르는 칸은 비워 두면 그 항목만 '확인 필요'로 나와요.</p></div>
 
 
@@ -220,7 +222,14 @@ export function householdView({ app, esc, workplaces, current, onSave, push, onF
   $('reset').onclick = () => { $('hh-err').textContent = '정말 지우려면 한 번 더 누르세요.'; $('reset').onclick = () => onSave(null); };
   $('copy').onclick = async () => { const t = $('json'); t.value = JSON.stringify(merged()); try { await navigator.clipboard.writeText(t.value); $('copy').textContent = '복사됨'; } catch { t.select(); } };
   $('import').onclick = () => {
-    try { const x = JSON.parse($('json').value.trim()); if (!x || typeof x !== 'object') throw 0; x.prefs = { regions: ['서울', '경기', '인천'], workplace: workplaces[0]?.id || null, ...(x.prefs || {}) }; onSave(x); }
+    // 가져온 값을 바로 저장하지 않고 위 입력칸에 채워서 보여 준다 → 확인·수정 후 저장
+    try {
+      const x = JSON.parse($('json').value.trim().replace(/[“”]/g, '"').replace(/[‘’]/g, "'"));
+      if (!x || typeof x !== 'object') throw 0;
+      x.prefs = { regions: ['서울', '경기', '인천'], workplace: workplaces[0]?.id || null, ...(x.prefs || {}) };
+      householdView({ ...opts, current: x, notice: '코드를 불러와 아래 칸에 채웠어요. 확인·수정한 뒤 맨 아래 [저장하고 목록 보기]를 눌러야 적용돼요.' });
+      window.scrollTo(0, 0);
+    }
     catch { $('hh-err').textContent = '코드 형식이 맞지 않아요. 복사한 코드를 그대로 붙여 넣어 주세요.'; }
   };
 }
