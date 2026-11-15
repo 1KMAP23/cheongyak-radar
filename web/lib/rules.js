@@ -554,7 +554,8 @@ export function typeRows(it) {
     if (!m.topPrice || !m.exclusiveArea) continue;
     const k = Math.round(m.exclusiveArea);
     const e = g.get(k) || { area: k, exact: m.exclusiveArea, lo: Infinity, hi: 0, types: [], pyeong: m.pyeong };
-    e.lo = Math.min(e.lo, m.topPrice); e.hi = Math.max(e.hi, m.topPrice); e.types.push(m.type); g.set(k, e);
+    e.lo = Math.min(e.lo, m.topPrice); e.hi = Math.max(e.hi, m.topPrice); e.types.push(m.type);
+    e.units = (e.units || 0) + (+m.general || 0) + (+m.special || 0); g.set(k, e);
   }
   const marginAt = (est, price, area) => est ? Math.round(est - price - taxOf(price, false) - Math.round(area * 2e5 / 1e5) * 1e5) : null;
   return [...g.values()].sort((a, b) => a.area - b.area).map(e => {

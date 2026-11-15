@@ -195,3 +195,19 @@ details summary{cursor:pointer;margin-top:10px;color:var(--accent);font-size:.88
 .card .row .nm{flex:1;min-width:0}
 .stats.one .st{padding:5px 10px}
 .stats.one .st b{font-size:.88rem}
+/* 카드: 한 줄 평가 + 대표 평형 */
+.units{font-size:.72rem;font-weight:500;color:var(--muted);white-space:nowrap}
+.card .place{font-size:.82em}
+.verdict-box{border-radius:10px;padding:8px 10px;display:grid;gap:3px}
+.verdict-box.good{background:var(--good-soft)}.verdict-box.mid{background:var(--warn-soft)}.verdict-box.bad{background:var(--bad-soft)}
+.verdict-box .vh{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.verdict-box.good b{color:var(--good)}.verdict-box.mid b{color:var(--warn)}.verdict-box.bad b{color:var(--bad)}
+.verdict-box p{margin:0;font-size:.86rem;color:var(--ink);line-height:1.45}
+.stars{color:#e0a100;font-size:.82rem;letter-spacing:1px;white-space:nowrap}.stars i{font-style:normal;color:var(--line)}
+.rep{display:grid;grid-template-columns:1.2fr 1.2fr 1fr;gap:6px;align-items:baseline;font-size:.95rem;padding:2px 2px 0}
+.rep span:nth-child(2){text-align:right}.rep b:last-child{text-align:right}
+.rep small{color:var(--muted);font-size:.72rem;font-weight:500}
+.rep b.good{color:var(--good)}.rep b.mid{color:var(--warn)}.rep b.bad{color:var(--bad)}
+.more-types{margin:0;font-size:.74rem;text-align:right}
+.meta .good-t{color:var(--good)}.meta .mid-t{color:var(--warn)}.meta .bad-t{color:var(--bad)}
+.rep{grid-template-columns:auto 1fr auto}.rep>*{white-space:nowrap}
