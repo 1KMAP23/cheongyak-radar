@@ -211,3 +211,9 @@ details summary{cursor:pointer;margin-top:10px;color:var(--accent);font-size:.88
 .more-types{margin:0;font-size:.74rem;text-align:right}
 .meta .good-t{color:var(--good)}.meta .mid-t{color:var(--warn)}.meta .bad-t{color:var(--bad)}
 .rep{grid-template-columns:auto 1fr auto}.rep>*{white-space:nowrap}
+/* 한 줄 평 */
+.verdict-box p.cl{margin:0;font-size:.84rem;line-height:1.5;color:var(--ink)}
+.verdict-box p.cl.key{font-weight:600}
+.verdict-box p.mine{margin:2px 0 0;font-size:.76rem;color:var(--muted)}
+.verdict-box.plain{background:var(--bg);border:1px solid var(--line)}
+.review p.cl{margin:0 0 6px;line-height:1.55}.review p.cl.key{font-weight:700;color:var(--accent)}

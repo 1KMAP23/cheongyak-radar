@@ -64,7 +64,12 @@ export function makeKakao(restKey) {
     // 학원 수: 첫 페이지만 받아도 meta.total_count에 1km 안 전체 개수가 온다
     const ac = await get(`https://dapi.kakao.com/v2/local/search/category.json?category_group_code=AC5&x=${x}&y=${y}&radius=1000&size=1`);
     const academies = ac.meta?.total_count ?? 0;
+    // 생활 상권: 대형마트(3km 안 가장 가까운 곳), 1km 안 병원·음식점·카페 수
+    const count = async (code, radius) => (await get(`https://dapi.kakao.com/v2/local/search/category.json?category_group_code=${code}&x=${x}&y=${y}&radius=${radius}&size=1`)).meta?.total_count ?? 0;
+    const mart = (await cat('MT1', 3000))[0];
+    const commerce = { mart: mart ? { name: mart.place_name, m: +mart.distance } : null, hospital1km: await count('HP8', 1000), food1km: await count('FD6', 1000), cafe1km: await count('CE7', 1000) };
     return {
+      commerce,
       subway: subway.slice(0, 3),
       elementary: schools.filter(s => /초등학교/.test(s.name)).slice(0, 2),
       middle: schools.filter(s => /중학교/.test(s.name)).slice(0, 1),
