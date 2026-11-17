@@ -244,3 +244,56 @@ export function householdView(opts) {
   $('import').onclick = doImport;
   $('json').addEventListener('paste', () => setTimeout(() => { if (findCode($('json').value)) doImport(); }, 50));
 }
+
+/**
+ * 저장한 설정 전체를 [칸 이름, 값] 목록으로 펼친다 (시트 기록용 — 화면 칸 이름 그대로, 체크 항목은 예/아니오).
+ * 시트 스크립트는 처음 보는 칸 이름을 새 열로 추가하므로 항목을 늘려도 스크립트를 바꿀 필요가 없다.
+ */
+export function sheetFields(h, { workplaces = [], pushOn = false } = {}) {
+  const yn = b => (b ? '예' : '아니오');
+  const man = x => (x == null || x === '' ? '' : Math.round(x / MAN));
+  const W = normWeights(h.prefs?.weights), RW = normRentalWeights(h.prefs?.rentalWeights);
+  const ap = h.accounts?.applicant || {};
+  const wp = h.prefs?.workplaceAddress ? `${h.prefs.workplaceName || '내 직장'} (직접 입력)` : workplaces.find(w => w.id === h.prefs?.workplace)?.name || h.prefs?.workplace || '선택 안 함';
+  const f = [
+    ['신청자 생년월일', h.applicantInfo?.birth || ''],
+    ['신청자가 세대주', yn(!!h.householdHeadSince)],
+    ['세대주가 된 날', h.householdHeadSince || ''],
+    ['세대원 전원 무주택', yn(h.homeless !== false)],
+    ['무주택이 된 날', h.noHomeSince || ''],
+    ['평생 무주택(생애최초)', yn(!!h.neverOwned)],
+    ['소득세 5년 이상', yn((h.incomeTaxYears?.applicant || 0) >= 5)],
+    ['최근 10년 당첨 이력', yn(!!h.recentWin)],
+    ['결혼(혼인신고)', yn(!!h.marriageDate)],
+    ['혼인신고일', h.marriageDate || ''],
+    ['예비 신혼부부', yn(!!h.preMarriage)],
+    ['한부모 가족', yn(!!h.singleParent)],
+    ['자녀 수', (h.children || []).length],
+    ['자녀', (h.children || []).map((c, i) => `${i + 1}) ${c.birth}${c.expected ? ' (출산 예정)' : ''}`).join(' / ')],
+    ['함께 사는 부모님 수', h.parentsDependents || 0],
+    ['만 65세 이상 부모님', yn(!!h.parentsOver65)],
+    ['주민등록 시·도', h.residence?.sido || ''],
+    ['전입일', h.residence?.since || ''],
+    ['월소득 신청자(만원)', man(h.monthlyIncome?.applicant)],
+    ['월소득 배우자(만원)', man(h.monthlyIncome?.partner)],
+    ['맞벌이', yn(!!h.dualIncome)],
+    ['부동산(만원)', man(h.assets?.realEstate)],
+    ['전월세 보증금(만원)', man(h.assets?.jeonseDeposit)],
+    ['예적금·주식(만원)', man(h.assets?.financial)],
+    ['대출(만원)', man(h.assets?.debt)],
+    ['자동차 수', (h.assets?.cars || []).length],
+    ['자동차', (h.assets?.cars || []).map((c, i) => `${i + 1}) ${c.name} · 등록 ${c.registeredAt || '?'} · ${Object.entries(c.values || {}).map(([y, v]) => `${y}년 ${man(v)}만`).join(', ') || '가액 없음'}${c.inHousehold === false ? ' · 세대원 명의 아님' : ''}`).join(' / ')],
+    ['청약통장 은행', ap.bank || ''],
+    ['청약통장 가입일', ap.openedAt || ''],
+    ['납입 인정 횟수', ap.paidCount ?? ''],
+    ['납입 인정 금액(만원)', man(ap.recognizedAmount)],
+    ['직장', wp],
+    ['직장 주소(직접 입력)', h.prefs?.workplaceAddress || ''],
+    ['관심 지역', (h.prefs?.regions || []).join('·')],
+    ['최대 분양가(만원)', man(h.prefs?.maxPrice)],
+    ...WK.map(([k, l]) => [`청약 점수 · ${l.split(' ')[0]}`, W[k]]),
+    ...RWK.map(([k, l]) => [`임대 점수 · ${l.split(' (')[0]}`, RW[k]]),
+    ['아침 알림', pushOn ? '켬' : '끔'],
+  ];
+  return f.map(([k, x]) => [k, x == null ? '' : x]);
+}

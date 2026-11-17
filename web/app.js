@@ -1,7 +1,7 @@
 // 청약 레이더 웹앱: 잠금 해제 → 목록 → 단지별 분석 페이지 → 공고문 원문 링크
 // 자격·점수는 이 기기에 저장된 '우리 집 정보'로 계산한다 (서버 데이터에는 세대 정보가 없다)
 import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo, typeRows, taxOf, normWeights, NON_APT, rentalEligibility, rentalTag, rentalFit, normRentalWeights } from './lib/rules.js';
-import { householdView } from './household.js';
+import { householdView, sheetFields } from './household.js';
 import { saleComment, rentalComment } from './lib/comment.js';
 const VAPID_PUBLIC = 'BDGbFHT5-WKQMTzp1Y_tj_5ByKKSqmjqoVrW-P67Yf2_EUMiaAS6Xabst53usz-kz1tCr6UA8OA_vk-gl47xPCA';
 const app = document.getElementById('app');
@@ -100,7 +100,8 @@ async function boot() {
   try { CONFIG = await (await fetch('config.json', { cache: 'no-store' })).json(); } catch { CONFIG = {}; }
   // 동의한 사람은 하루 한 번 최신 설정·알림 정보를 다시 보낸다 (알림 정보는 가끔 바뀐다)
   const hh = loadHH(), last = store.get('cy-synced');
-  if (hh?.shareConsent && last !== kstToday()) { syncShare(hh); store.set('cy-synced', kstToday()); }
+  const tag = kstToday() + '/f2'; // 시트 형식이 바뀌면 뒤 표시를 바꿔 한 번 더 보낸다
+  if (hh?.shareConsent && last !== tag) { syncShare(hh); store.set('cy-synced', tag); }
   const p = store.get('cy-pass');
   if (!p) return lockView();
   try { RAW = await decrypt(p); R = enrich(RAW); route(); }
@@ -486,7 +487,7 @@ async function share(body) {
 // 저장한 설정 전체와 알림 구독을 서버(구글 시트)에 보낸다. 출퇴근 계산·개인 알림·서비스 개선용
 async function syncShare(hh) {
   const push = (() => { try { return JSON.parse(store.get('cy-push') || 'null'); } catch { return null; } })();
-  if (hh?.shareConsent) { await share({ settings: hh, push }); store.set('cy-shared', '1'); }
+  if (hh?.shareConsent) { await share({ settings: hh, push, fields: sheetFields(hh, { workplaces: RAW?.workplaces || [], pushOn: !!push }) }); store.set('cy-shared', '1'); }
   else if (store.get('cy-shared')) { await share({ delete: true }); store.del('cy-shared'); }
 }
 const pushHelper = () => ({
