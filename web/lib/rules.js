@@ -80,9 +80,11 @@ function applicantChecks(it, h, date, cat, T) {
   const inc = Object.values(h.monthlyIncome || {}).reduce((s, v) => s + (+v || 0), 0);
   const size = Math.max(1, (h.marriageDate ? 2 : 1) + childrenAt(h, date) + (h.parentsDependents || 0));
   const base = T.urbanIncome100?.[Math.min(size, 5)];
-  if (inc && base) {
+  if (homesOf(h) && !pub) { /* 유주택은 특공을 못 넣어서 소득 기준이 상관없다 (민영 일반공급은 소득 기준 없음) */ }
+  else if (inc && base) {
     const pct = Math.round((inc / base) * 100);
-    push('소득', `세대 월평균 ${won(inc)} = ${size}인 가구 도시근로자 소득의 ${pct}%${h.dualIncome ? ' (맞벌이)' : ''} → ${pct <= 100 ? '모든 특공 소득 기준 통과' : pct <= 130 ? '일부 특공 소득 초과 가능, 공고문 표 확인' : '공공 특공 대부분 소득 초과, 민영은 추첨분만'}`, pct <= 100 ? 'good' : pct <= 130 ? 'mid' : 'bad');
+    // 소득 기준은 특별공급(공공은 일반공급 일부도)에만 있다. 민영 일반공급은 소득 무관이라 '불가'로 치지 않는다
+    push('소득', `세대 월평균 ${won(inc)} = ${size}인 가구 도시근로자 소득의 ${pct}%${h.dualIncome ? ' (맞벌이)' : ''} → ${pct <= 100 ? '모든 특공 소득 기준 통과' : pct <= 130 ? '일부 특공 소득 초과 가능, 공고문 표 확인' : pub ? '공공 특공 대부분 소득 초과' : '특공은 대부분 소득 초과, 일반공급(가점·추첨)은 소득 상관없음'}`, pct <= 100 ? 'good' : pct <= 130 || !pub ? 'mid' : 'bad');
   } else push('소득', '세대 월평균 소득 미입력', 'mid');
 
   const res = h.residence || {};
@@ -107,15 +109,58 @@ function applicantChecks(it, h, date, cat, T) {
     else push('세대주', `공고일(${date}) 당시 세대주 아님 → 생애최초·${it.flags?.speculativeZone || it.flags?.adjustArea ? '규제지역 1순위 불가' : '일부 유형 불가'}. 신혼·신생아 특공, 2순위는 가능`, 'mid');
   }
 
-  const sp = specialTypes(h, date);
+  const sp = homesOf(h) ? { out: [], no: [] } : specialTypes(h, date);
   if (sp.out.length && cat !== 'newlywedHopeTown') push('특공 가능', sp.out.join(' · '), 'good');
   for (const n of sp.no) push('특공 불가', n, 'mid');
 
-  if (cat === 'private') {
+  if (cat === 'private' && homesOf(h)) push('민영 가점', '유주택이라 무주택기간 점수가 0점 → 가점제는 사실상 어렵고 추첨제가 기회예요', 'mid');
+  else if (cat === 'private') {
     const g = gajeom(h, date);
     push('민영 가점', g.total != null
       ? `무주택 ${g.noHome} + 부양가족 ${g.family}(${g.deps}명) + 통장 ${g.bank} = ${g.total}점 / 84`
       : `무주택 ${g.noHome ?? '?'} + 부양가족 ${g.family}(${g.deps}명) + 통장 ${g.bank ?? '가입일 미입력'} → 가점보다 특공·추첨제 물량이 유리`, g.total >= 50 ? 'good' : 'mid');
+  }
+  return out;
+}
+
+/** 세대 보유 주택 수 (분양권·입주권 포함). 예전 설정(무주택 체크만)은 집 있음 = 1채로 본다 */
+export const homesOf = h => (h?.homesOwned != null && h.homesOwned !== '' ? Math.max(0, +h.homesOwned || 0) : h?.homeless === false ? 1 : 0);
+
+/** 민영 일반공급 추첨제 비율 (주택공급규칙 제28조, 2023 개정 기준). 지자체·사업주체 조정이 있어 추정치 → 공고문 확인
+ *  투기과열: 60㎡ 이하 60% · 60~85㎡ 30% · 85㎡ 초과 20%
+ *  조정대상: 60㎡ 이하 60% · 60~85㎡ 30% · 85㎡ 초과 70%
+ *  비규제:   85㎡ 이하 60% · 85㎡ 초과 100% */
+export function lotteryShare(area, zone) {
+  if (zone === 'spec') return area <= 60 ? 0.6 : area <= 85 ? 0.3 : 0.2;
+  if (zone === 'adjust') return area <= 60 ? 0.6 : area <= 85 ? 0.3 : 0.7;
+  return area <= 85 ? 0.6 : 1;
+}
+/** 10.15 대책 규제지역(서울 전역·경기 12곳)은 투기과열지구와 조정대상지역이 겹쳐 투기과열 기준을 쓴다 */
+export function zoneOf(it, L) { return it.flags?.speculativeZone ? 'spec' : it.flags?.adjustArea ? 'adjust' : isRegulated(it, L) ? 'spec' : 'none'; }
+
+/** 유주택 세대가 이 공고에 넣을 수 있는지와 추첨 물량 (민영 일반공급) */
+export function ownerChecks(it, h, T) {
+  const n = homesOf(h), cat = it.category, out = [], push = (k, v, s) => out.push({ k, v, s });
+  if (!n) return out;
+  const L = T?.loan, zone = zoneOf(it, L), reg = zone !== 'none';
+  const label = `${n >= 2 ? '2주택 이상' : '1주택'} 세대`;
+  if (['publicSale', 'equityShare', 'newlywedHopeTown'].includes(cat)) push('주택 수', `${label} → 공공분양·신혼희망타운은 무주택 세대구성원만 신청할 수 있어요`, 'bad');
+  else if (cat === 'noRank') push('주택 수', `${label} → 무순위(줍줍)는 2025년 개정으로 무주택 세대구성원만 신청할 수 있어요`, 'bad');
+  else if (cat === 'arbitrary') push('주택 수', `${label} → 임의공급은 사업주체가 자격을 정해요. 보통 유주택자도 되지만 공고문 '신청자격' 확인`, 'mid');
+  else if (cat === 'urban' || cat === 'officetel' || cat === 'lodging') push('주택 수', `${label}도 신청할 수 있어요 (청약통장·주택 수 제한 없음)`, 'good');
+  else if (cat === 'private') {
+    // 수도권 추첨제: 75% 무주택 → 25% 무주택 탈락자 + 1주택(기존 집 처분 조건) → 그래도 남으면 유주택 전체 (주택공급규칙 제28조)
+    if (reg && n >= 2) push('주택 수', '규제지역은 2주택 이상 세대가 1순위가 안 돼요 → 2순위만 가능해서 인기 단지는 사실상 기회가 없어요', 'bad');
+    else if (n >= 2) push('주택 수', '비규제지역이라 2주택 이상도 1순위는 돼요. 다만 추첨 물량은 무주택(75%) → 무주택 탈락자·1주택(25%)이 먼저 가져가고 남은 물량만 돌아와서 인기 단지는 기회가 거의 없어요', 'mid');
+    else push('주택 수', `1주택: 1순위 가능${reg ? '(규제지역은 세대주·통장 가입 2년 필요)' : ''}. 가점제는 불리하고 추첨제로 경쟁해요. 추첨 물량의 75%는 무주택자 먼저, 남은 25%를 무주택 탈락자와 1주택자가 함께 추첨해요. 이 25%로 당첨되면 입주 후 6개월 안에 기존 집을 팔아야 해요`, 'mid');
+    push('특공', '특별공급(신혼·생애최초·신생아·다자녀·노부모)은 무주택 요건이라 신청할 수 없어요', 'mid');
+    if (!(reg && n >= 2)) {
+      const g = new Map();
+      for (const m of it.models || []) { if (!m.exclusiveArea) continue; const k = Math.round(m.exclusiveArea); g.set(k, (g.get(k) || 0) + (+m.general || 0)); }
+      const lots = [...g.entries()].filter(([, v]) => v > 0).sort((a, b) => a[0] - b[0]).map(([a, v]) => { const lot = Math.floor(v * lotteryShare(a, zone)); return { area: a, general: v, lot, mine: n === 1 ? Math.floor(lot * 0.25) : null }; });
+      const rows = lots.map(l => `${l.area}㎡ 일반 ${l.general} → 추첨 약 ${l.lot}${l.mine != null ? ` (1주택 경쟁분 약 ${l.mine})` : ''}`);
+      if (rows.length) out.push({ k: '추첨 물량', v: `${rows.join(' · ')}세대${n >= 2 ? ' (무주택·1주택 다음 남은 물량만)' : ''} — 법정 비율로 계산한 추정치, 공고문 확인`, s: 'mid', lots });
+    }
   }
   return out;
 }
@@ -133,7 +178,8 @@ export function eligibility(it, h, TH) {
   const checks = [];
   const push = (k, v, s) => checks.push({ k, v, s });
 
-  if (h.homeless === false) push('무주택', '세대원 중 집 가진 사람 있음 → 무주택 요건 공고 불가', cat === 'arbitrary' ? 'mid' : 'bad');
+  const owned = homesOf(h);
+  if (owned) for (const c of ownerChecks(it, h, T)) checks.push(c);
   else push('무주택', '세대 전원 무주택', 'good');
   if (h.recentWin) push('재당첨', '최근 당첨 이력 있음 → 재당첨 제한 기간 공고문 확인', 'bad');
 
@@ -165,14 +211,14 @@ export function eligibility(it, h, TH) {
     // 무순위는 지자체가 거주지를 제한할 수 있다 (예: 서울 공고는 서울 거주자만)
     const sido = h.residence?.sido;
     if (cat === 'noRank' && sido && it.region && !sido.startsWith(it.region)) push('거주지 제한', `${sido} 거주 → ${it.region} 무순위는 해당 지역 거주자로 제한되는 경우가 많아요. 공고문 '신청자격' 확인`, 'mid');
-    const sp = specialTypes(h, date).out;
-    push('당첨 시 주의', `당첨되면 유주택자가 돼요${cat === 'urban' ? '(도시형생활주택도 주택, 전용 20㎡ 이하 1채만 예외)' : ''}${sp.length ? ` → ${sp.join('·')} 특공 기회가 사라져요` : ''}${cat === 'urban' ? '' : '. 줍줍 당첨은 재당첨 제한도 걸릴 수 있어요'}`, sp.length ? 'bad' : 'mid');
+    const sp = owned ? [] : specialTypes(h, date).out;
+    if (!owned) push('당첨 시 주의', `당첨되면 유주택자가 돼요${cat === 'urban' ? '(도시형생활주택도 주택, 전용 20㎡ 이하 1채만 예외)' : ''}${sp.length ? ` → ${sp.join('·')} 특공 기회가 사라져요` : ''}${cat === 'urban' ? '' : '. 줍줍 당첨은 재당첨 제한도 걸릴 수 있어요'}`, sp.length ? 'bad' : 'mid');
   } else for (const c of applicantChecks(it, h, date, cat, T)) checks.push(c);
 
   const hardBad = checks.filter(c => c.s === 'bad' && c.k !== '당첨 시 주의');
   let status;
   if (hardBad.length) status = cat === 'publicSale' && hardBad.every(c => /부동산|자동차/.test(c.k)) ? '경계' : '불가'; // 공공분양 자산 초과는 60㎡ 초과 일반공급으로 가능
-  else if (checks.some(c => c.s === 'mid' && /자동차|총자산|세대주|거주지 제한/.test(c.k)) || checks.some(c => c.k === '당첨 시 주의' && c.s === 'bad')) status = '경계';
+  else if (checks.some(c => c.s === 'mid' && /자동차|총자산|세대주|거주지 제한|주택 수/.test(c.k)) || checks.some(c => c.k === '당첨 시 주의' && c.s === 'bad')) status = '경계';
   else status = '가능';
   return { cat, status, checks, totalAsset: total, kids };
 }
@@ -182,7 +228,7 @@ export function eligibilityTag(e) {
   if (e.status === '불가') return { icon: '❌', text: '자격 미달', why: [...new Set(e.checks.filter(c => c.s === 'bad').map(c => c.k))].join('·') };
   if (e.status !== '경계') return null;
   if (e.checks.some(c => c.k === '당첨 시 주의' && c.s === 'bad')) return { icon: '⚠️', text: '당첨 시 특공 기회 사라짐', why: '' };
-  const why = [...new Set(e.checks.filter(c => c.s === 'bad' || (c.s === 'mid' && /자동차|총자산|세대주|부동산|거주지 제한/.test(c.k))).map(c => c.k === '세대주' ? '생애최초 불가' : c.k))].join('·');
+  const why = [...new Set(e.checks.filter(c => c.s === 'bad' || (c.s === 'mid' && /자동차|총자산|세대주|부동산|거주지 제한|주택 수/.test(c.k))).map(c => c.k === '세대주' ? '생애최초 불가' : c.k === '주택 수' ? (e.cat === 'arbitrary' ? '유주택 가능 여부 공고문 확인' : '유주택 추첨만') : c.k))].join('·');
   return { icon: '⚠️', text: '자격 일부 제한', why };
 }
 
@@ -315,7 +361,7 @@ export function funding(it, h, TH) {
   const pick = ms.slice().sort((a, b) => Math.min(...want.map(w => Math.abs(a.exclusiveArea - w))) - Math.min(...want.map(w => Math.abs(b.exclusiveArea - w))) || a.topPrice - b.topPrice)[0];
   const price = pick.topPrice;
   const reg = isRegulated(it, L);
-  const first = !!h.neverOwned && h.homeless !== false;
+  const first = !!h.neverOwned && !homesOf(h);
   const ltv = first ? L.ltv.firstHome : reg ? L.ltv.regulated : L.ltv.nonRegulated;
   const cap = L.capByPrice.find(([upTo]) => price <= upTo)[1];
   const inc = Object.values(h.monthlyIncome || {}).reduce((s, v) => s + (+v || 0), 0);
@@ -464,7 +510,7 @@ export function rentalEligibility(it, h, TH) {
     push(label, `${won(A.total)} (부동산+전세보증금+금융+자동차−부채) · 기준 ${won(limit)}`, A.total <= limit ? 'good' : 'bad');
     if (car != null) push('자동차', A.maxCar ? `가장 비싼 차 ${won(A.maxCar)} · 기준 ${won(car)}` : '차량 없음', A.maxCar <= car ? 'good' : 'bad');
   };
-  if (h.homeless === false) push('무주택', '세대원 중 집이 있으면 공공임대 신청 불가', 'bad'); else push('무주택', '세대원 전원 무주택', 'good');
+  if (homesOf(h)) push('무주택', '세대원 중 집이 있으면 공공임대 신청 불가', 'bad'); else push('무주택', '세대원 전원 무주택', 'good');
 
   const married7 = h.marriageDate && yearsBetween(h.marriageDate, date) <= 7;
   const kid6 = (h.children || []).some(c => c.birth && (c.expected || yearsBetween(bd(c.birth), date) <= 6));
@@ -583,4 +629,13 @@ export function typeRows(it) {
     return { ...e, estimate: est, expected: !!useExp, reliable: useExp ? true : reliable, thin: row?.comp?.status === '거래 부족',
       marginHi: marginAt(est, e.hi, e.exact), marginLo: marginAt(est, e.lo, e.exact), method: useExp ? row.expected.source : row?.comp?.method || null };
   });
+}
+
+/** 유주택 세대도 신청할 수 있는 공고인가 (집 정보 없이 '🏡 유주택 가능' 탭용). 규제지역 민영은 1주택까지 */
+export function ownerOk(it, TH, homes = 1) {
+  const cat = it.category;
+  if (['urban', 'officetel', 'lodging', 'arbitrary'].includes(cat)) return true;
+  if (cat !== 'private') return false;
+  const T = pickThresholds(TH, (it.noticeDate || it.window?.start || '2026').slice(0, 4));
+  return zoneOf(it, T?.loan) === 'none' || homes < 2;
 }

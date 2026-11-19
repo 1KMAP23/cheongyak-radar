@@ -1,6 +1,6 @@
 // 청약 레이더 웹앱: 잠금 해제 → 목록 → 단지별 분석 페이지 → 공고문 원문 링크
 // 자격·점수는 이 기기에 저장된 '우리 집 정보'로 계산한다 (서버 데이터에는 세대 정보가 없다)
-import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo, typeRows, taxOf, normWeights, NON_APT, rentalEligibility, rentalTag, rentalFit, normRentalWeights } from './lib/rules.js';
+import { won, eligibility, eligibilityTag, commuteVerdict, overall, fitScore, brandOf, sizeInfo, typeRows, taxOf, normWeights, NON_APT, rentalEligibility, rentalTag, rentalFit, normRentalWeights, ownerOk, homesOf } from './lib/rules.js';
 import { householdView, sheetFields } from './household.js';
 import { saleComment, rentalComment } from './lib/comment.js';
 const VAPID_PUBLIC = 'BDGbFHT5-WKQMTzp1Y_tj_5ByKKSqmjqoVrW-P67Yf2_EUMiaAS6Xabst53usz-kz1tCr6UA8OA_vk-gl47xPCA';
@@ -31,6 +31,7 @@ function enrich(raw) {
     const it = { ...src, closingToday: src.window?.end === today };
     it.commute = wp ? src.commutes?.[wp.id] || null : null;
     it.eligibility = eligibility(it, HH, raw.thresholds);
+    it.ownerOk = ownerOk(it, raw.thresholds, Math.max(1, homesOf(HH)));
     it.commuteResult = !wp ? { verdict: '확인 필요', text: '설정에서 직장을 고르면 출퇴근 시간을 계산해요' }
       : wp.custom && !it.commute ? { verdict: '확인 필요', text: '직장 등록 중 · 다음 평일 아침 분석부터 출퇴근 시간이 나와요' }
       : commuteVerdict(it.commute, wp.name);
@@ -127,6 +128,7 @@ const FILTERS = [
   ['new', '🆕 NEW', it => it.isNew],
   ['soon', '📅 접수 예정', it => it.window?.start > R.today],
   ['ok', '자격 됨', it => it.eligibility.status !== '불가'],
+  ['owner', '🏡 유주택 가능', it => it.ownerOk],
   ['near', '🚗 45분 이내', it => it.commuteResult.verdict === '가능' || it.commuteResult.verdict === '애매'],
   ['rec', '투자 추천', it => it.invest.verdict === '추천'],
   ['hot', '🔥 시세보다 2억+ 싼 곳', it => it.hot > 0],
@@ -149,7 +151,9 @@ function listView() {
   if (mode === 'rental') return rentalList();
   const W = normWeights(R.HH?.prefs?.weights);
   const ALWAYS = new Set(['all', 'today', 'new', 'soon', 'ok', 'near']);
-  const shown = FILTERS.filter(([k, , f]) => ALWAYS.has(k) || k === filter || R.items.some(f));
+  // 유주택 탭: 집 정보를 안 넣었거나 집이 있는 사람에게만 (무주택으로 저장한 사람에겐 숨김)
+  { const hh = loadHH(); if (!hh || homesOf(hh)) ALWAYS.add('owner'); }
+  const shown = FILTERS.filter(([k, , f]) => ALWAYS.has(k) || k === filter || (k !== 'owner' && R.items.some(f)));
   const items = R.items.filter(match);
   // 오늘 마감은 맨 위에 따로, 나머지는 적합도 순. 자격 미달도 빼지 않고 ❌ 태그로 표시
   const banners = [
@@ -344,6 +348,9 @@ function commuteBox(it) {
 function mineLine(it) {
   const p = [];
   p.push(it.eligTag ? `${it.eligTag.icon} ${it.eligTag.text}${it.eligTag.why ? `(${it.eligTag.why})` : ''}` : R.HH ? '✅ 자격 됨' : '자격은 설정 후 판정');
+  // 유주택 세대: 실제로 경쟁하는 추첨 물량을 한눈에
+  const lot = homesOf(R.HH) && it.eligibility.status !== '불가' && it.eligibility.checks?.find(c => c.k === '추첨 물량');
+  if (lot?.lots?.length) { const main = lot.lots.filter(l => Math.abs(l.area - 59) <= 8 || Math.abs(l.area - 84) <= 8); p.push(`${lot.lots[0].mine != null ? '1주택 추첨' : '추첨'} ${(main.length ? main : lot.lots).slice(0, 2).map(l => `${l.area}㎡ 약 ${l.mine ?? l.lot}`).join(' · ')}세대(추정)`); }
   return p.join(' · ');
 }
 const VERDICT = { 추천: ['👍', '추천', 'good'], 조건부: ['🤔', '조건부', 'mid'], 비추천: ['👎', '비추천', 'bad'] };
@@ -359,7 +366,7 @@ function card(it) {
   return `<a class="card" href="#item=${encodeURIComponent(it.id)}">
     <div class="row"><span class="rk mono${it.rank <= 3 ? ' top' : ''}">${it.rank}</span><span class="nm">${isNew(it) ? '<span class="newb">NEW</span> ' : ''}${it.hot ? `<span class="fire">${'🔥'.repeat(it.hot)}</span> ` : ''}<span class="place">(${esc(placeFull(it))})</span> ${esc(it.shortName || it.name)}${units(it) ? ` <small class="units">${esc(units(it))}</small>` : ''}</span><span class="fit mono" title="나에게 맞는 점수">${it.fit.total}<small>점</small></span></div>
     ${mainBox(it)}
-    <div class="verdict-box ${vt}"><div class="vh"><b>${vi} ${vl}</b><span class="stars" aria-label="${stars(it)}점">${'★'.repeat(Math.floor(stars(it)))}${stars(it) % 1 ? '½' : ''}<i>${'★'.repeat(5 - Math.ceil(stars(it)))}</i></span></div>${(cm => cm.lines.map((l, i) => `<p class="cl${i === 2 ? ' key' : ''}">${esc(l)}</p>`).join(''))(saleComment(it, { today: R.today }))}<p class="mine">나에게: ${esc(mineLine(it))}</p></div>
+    <div class="verdict-box ${vt}"><div class="vh"><b>${vi} ${vl}</b><span class="stars" aria-label="${stars(it)}점">${'★'.repeat(Math.floor(stars(it)))}${stars(it) % 1 ? '½' : ''}<i>${'★'.repeat(5 - Math.ceil(stars(it)))}</i></span></div>${(cm => cm.lines.map((l, i) => `<p class="cl${i === 2 ? ' key' : ''}">${esc(l)}</p>`).join(''))(saleComment(it, { today: R.today, owner: homesOf(R.HH) }))}<p class="mine">나에게: ${esc(mineLine(it))}</p></div>
     ${commuteBox(it)}
     ${it.eligTag || it.overBudget || kindTag(it) ? `<div class="tags">${kindTag(it)}${etag(it)}${it.overBudget ? '<span class="etag warn">💸 예산 초과</span>' : ''}</div>` : ''}
     <div class="meta"><span class="tag">${esc(it.categoryLabel)}</span>${dueTag(it)}<span>${esc(schedLine(it))}</span></div>
@@ -421,7 +428,7 @@ function detailView(id) {
       ${kpi('자격', esc(el.status), tone(el.status === '경계' ? '애매' : el.status), it.eligTag ? esc(it.eligTag.why || it.eligTag.text) : '')}
     </div>
     ${(cm => `<section class="panel review"><h2>📝 한 줄 평</h2>${cm.lines.map((l, i) => `<p class="cl${i === 2 ? ' key' : ''}">${esc(l)}</p>`).join('')}</section>
-    <section class="panel pc"><div><h2>👍 장점</h2><ul>${[...cm.pros, ...pc.pro.filter(x => /출퇴근|자격|경쟁률/.test(x))].map(x => `<li>${esc(x)}</li>`).join('') || '<li class="sub">없음</li>'}</ul></div><div><h2>👎 단점</h2><ul>${[...cm.cons, ...pc.con.filter(x => /출퇴근|자격/.test(x))].map(x => `<li>${esc(x)}</li>`).join('') || '<li class="sub">없음</li>'}</ul></div></section>`)(saleComment(it, { today: R.today }))}
+    <section class="panel pc"><div><h2>👍 장점</h2><ul>${[...cm.pros, ...pc.pro.filter(x => /출퇴근|자격|경쟁률/.test(x))].map(x => `<li>${esc(x)}</li>`).join('') || '<li class="sub">없음</li>'}</ul></div><div><h2>👎 단점</h2><ul>${[...cm.cons, ...pc.con.filter(x => /출퇴근|자격/.test(x))].map(x => `<li>${esc(x)}</li>`).join('') || '<li class="sub">없음</li>'}</ul></div></section>`)(saleComment(it, { today: R.today, owner: homesOf(R.HH) }))}
     <div class="actions">
       ${it.noticeUrl ? `<a class="btn primary" href="${esc(it.noticeUrl)}" target="_blank" rel="noopener">공고문 원문 보기 ↗</a>` : ''}
       <div class="mini">${it.lhUrl ? `<a class="btn" href="${esc(it.lhUrl)}" target="_blank" rel="noopener">LH 공고 ↗</a>` : ''}${map ? `<a class="btn" href="${map}" target="_blank" rel="noopener">지도 ↗</a>` : ''}${nav ? `<a class="btn" href="${nav}" target="_blank" rel="noopener">길찾기 ↗</a>` : ''}</div>

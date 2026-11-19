@@ -19,7 +19,7 @@ function repRow(it) {
 }
 
 /** 청약(분양) 공고 평 */
-export function saleComment(it, { today = new Date().toISOString().slice(0, 10) } = {}) {
+export function saleComment(it, { today = new Date().toISOString().slice(0, 10), owner = 0 } = {}) {
   const pros = [], cons = [];
   const L = it.location || {}, C = L.commerce || {}, st = L.subway?.[0], el = L.elementary?.[0];
   const text = `${it.name || ''} ${it.address || ''}`;
@@ -96,6 +96,11 @@ export function saleComment(it, { today = new Date().toISOString().slice(0, 10) 
   else if (third || newTown) line3 = `지금 시세로는 판단이 어렵고 미래 가치(교통·상권 완성)에 거는 청약이에요${yrs != null && yrs >= 3 ? `. 입주까지 ${Math.round(yrs)}년, 장기 관점으로 접근하세요` : ''}`;
   else line3 = '시세 판단이 어려워요. 공고문 분양가를 인근 신축 실거래·호가와 직접 비교한 뒤 결정하세요';
 
+  // 유주택 세대 기준으로 바꿔 말하기
+  if (owner) {
+    if (few && units && units <= 3) line3 = `${units}세대 추첨이라 당첨 확률은 매우 낮아요. 임의공급은 유주택자도 되는 경우가 많으니 공고문 신청자격을 확인하고 넣어 보세요`;
+    if (it.category === 'private') cons.unshift(it.flags?.speculativeZone || it.flags?.adjustArea || /^서울/.test(it.region || '') ? '유주택: 추첨 물량 25%만 경쟁 · 당첨 시 기존 집 처분' : '유주택: 가점 불리, 추첨제로 도전');
+  }
   return { lines: [line1, line2, line3], pros: [...new Set(pros)].slice(0, 6), cons: [...new Set(cons)].slice(0, 6) };
 }
 

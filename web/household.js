@@ -1,6 +1,6 @@
 // 설정 화면 하나: 우리 집 정보 + 직장 + 추천 점수 비율 + 알림 + 이 기기
 // 설정은 이 기기에 저장되고, 서버 주소가 설정돼 있으면 서버(구글 시트)에도 저장된다.
-import { DEFAULT_WEIGHTS, normWeights, RENTAL_DEFAULT_WEIGHTS, normRentalWeights } from './lib/rules.js';
+import { DEFAULT_WEIGHTS, normWeights, RENTAL_DEFAULT_WEIGHTS, normRentalWeights, homesOf } from './lib/rules.js';
 const MAN = 1e4; // 입력은 만원 단위
 const RWK = [['commute', '출퇴근'], ['price', '주변 매매 가격대'], ['location', '입지 (지하철·학군)'], ['buzz', 'SNS 화제']];
 const WK = [['margin', '안전마진'], ['commute', '출퇴근'], ['location', '입지 (지하철·학군·규모·브랜드)'], ['buzz', 'SNS 화제']];
@@ -50,8 +50,9 @@ export function householdView(opts) {
       ${fld('ap-birth', '신청자 생년월일', v(h.applicantInfo?.birth), 'date')}
       ${chk('head', !!h.householdHeadSince, '신청자가 세대주예요')}
       ${fld('head-since', '세대주가 된 날 (등본 기준)', v(h.householdHeadSince), 'date')}
-      ${chk('homeless', h.homeless !== false, '세대원 전원 무주택이에요', '분양권·입주권도 주택으로 봐요')}
-      ${fld('nohome', '무주택이 된 날 (한 번도 집이 없었으면 비워 두기)', v(h.noHomeSince), 'date')}
+      <label class="fld"><span>세대가 가진 집 (등본상 세대원 전체)<small>분양권·입주권도 집으로 세요</small></span><select id="homes">${[[0, '없음 (무주택)'], [1, '1채'], [2, '2채 이상']].map(([n, l]) => `<option value="${n}" ${homesOf(h) === n || (n === 2 && homesOf(h) > 2) ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <p class="sub" id="homes-tip" ${homesOf(h) ? '' : 'hidden'}>집이 있으면 공공분양·신혼희망타운·특별공급·무순위·공공임대는 신청할 수 없어요. 민영 일반공급 추첨제와 임의공급을 중심으로 보여 드려요.</p>
+      <div id="nohome-wrap" ${homesOf(h) ? 'hidden' : ''}>${fld('nohome', '무주택이 된 날 (한 번도 집이 없었으면 비워 두기)', v(h.noHomeSince), 'date')}</div>
       ${chk('never', !!h.neverOwned, '세대원 모두 평생 집을 가진 적이 없어요', '생애최초 특공 조건')}
       ${chk('tax5', (h.incomeTaxYears?.applicant || 0) >= 5, '신청자가 소득세를 5년 이상 냈어요', '생애최초 특공 조건 (기간 합산)')}
       ${chk('win', !!h.recentWin, '세대원이 최근 10년 안에 청약 당첨된 적 있어요', '재당첨 제한 확인')}
@@ -147,6 +148,7 @@ export function householdView(opts) {
   $('add-kid').onclick = () => { $('kids').insertAdjacentHTML('beforeend', kidRow({}, kidN++)); bindDel(); };
   $('add-car').onclick = () => { $('cars').insertAdjacentHTML('beforeend', carRow({}, carN++)); bindDel(); };
 
+  $('homes').onchange = () => { const o = +$('homes').value > 0; $('homes-tip').hidden = !o; $('nohome-wrap').hidden = o; if (o) $('never').checked = false; };
   $('wp').onchange = () => { $('wp-custom').hidden = $('wp').value !== '__custom'; };
   const sumW = () => { const t = WK.reduce((s, [k]) => s + (+$(`w-${k}`).value || 0), 0); $('w-sum').textContent = `합계 ${t}점${t === 100 ? '' : ' → 저장하면 100점에 맞춰요'}`; };
   WK.forEach(([k]) => ($(`w-${k}`).oninput = sumW)); sumW();
@@ -177,7 +179,8 @@ export function householdView(opts) {
     return {
       applicantInfo: { birth: date('ap-birth') },
       householdHeadSince: $('head').checked ? date('head-since') || '2000-01-01' : null,
-      homeless: $('homeless').checked,
+      homesOwned: +$('homes').value,
+      homeless: +$('homes').value === 0,
       noHomeSince: date('nohome'),
       neverOwned: $('never').checked,
       incomeTaxYears: { applicant: $('tax5').checked ? 5 : 0 },
@@ -259,7 +262,7 @@ export function sheetFields(h, { workplaces = [], pushOn = false } = {}) {
     ['신청자 생년월일', h.applicantInfo?.birth || ''],
     ['신청자가 세대주', yn(!!h.householdHeadSince)],
     ['세대주가 된 날', h.householdHeadSince || ''],
-    ['세대원 전원 무주택', yn(h.homeless !== false)],
+    ['보유 주택 수', ['무주택', '1채', '2채 이상'][Math.min(homesOf(h), 2)]],
     ['무주택이 된 날', h.noHomeSince || ''],
     ['평생 무주택(생애최초)', yn(!!h.neverOwned)],
     ['소득세 5년 이상', yn((h.incomeTaxYears?.applicant || 0) >= 5)],
