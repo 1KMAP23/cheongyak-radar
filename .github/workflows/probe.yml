@@ -1,5 +1,8 @@
 name: probe
-on: { workflow_dispatch: {} }
+on:
+  workflow_dispatch:
+    inputs:
+      name: { description: '공고명 일부', required: true }
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -7,5 +10,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: node scripts/probe.mjs
-        env: { DATA_GO_KR_KEY: "${{ secrets.DATA_GO_KR_KEY }}" }
+      - run: npm install --no-audit --no-fund
+      - run: node scripts/probe-item.mjs
+        env: { DATA_GO_KR_KEY: "${{ secrets.DATA_GO_KR_KEY }}", KAKAO_REST_KEY: "${{ secrets.KAKAO_REST_KEY }}", PROBE_NAME: "${{ inputs.name }}" }
