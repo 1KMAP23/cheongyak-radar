@@ -11,5 +11,5 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm install --no-audit --no-fund
-      - run: node scripts/probe-item.mjs
+      - run: node scripts/probe-raw.mjs && node scripts/probe-item.mjs
         env: { DATA_GO_KR_KEY: "${{ secrets.DATA_GO_KR_KEY }}", KAKAO_REST_KEY: "${{ secrets.KAKAO_REST_KEY }}", PROBE_NAME: "${{ inputs.name }}" }
