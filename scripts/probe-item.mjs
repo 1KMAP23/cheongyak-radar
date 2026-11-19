@@ -5,7 +5,9 @@ import { makeKakao, CHURCH } from '../src/collect/kakao.mjs';
 const key = process.env.DATA_GO_KR_KEY, kakao = makeKakao(process.env.KAKAO_REST_KEY), q = process.env.PROBE_NAME;
 const from = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const { items } = await collectApplyhome({ key, from, sinceDays: 120, log: () => {} });
-const hits = items.filter(i => (i.name || '').replace(/\s/g, '').includes(q.replace(/\s/g, '')));
+let hits = items.filter(i => (i.name || '').replace(/\s/g, '').includes(q.replace(/\s/g, '')));
+// API에 아직 없으면 주소·면적으로 직접 분석 (PROBE_ADDR, PROBE_AREAS=59,79,84)
+if (!hits.length && process.env.PROBE_ADDR) hits = [{ name: q, address: process.env.PROBE_ADDR, models: (process.env.PROBE_AREAS || '59,84').split(',').map(a => ({ type: a, exclusiveArea: +a })) }];
 console.log('HITS', hits.length);
 for (const it of hits) {
   console.log('ITEM', JSON.stringify({ name: it.name, category: it.category, address: it.address, window: it.window, schedule: it.schedule, flags: it.flags, totalUnits: it.totalUnits, moveIn: it.moveIn, builder: it.builder, noticeDate: it.noticeDate, url: it.noticeUrl }));

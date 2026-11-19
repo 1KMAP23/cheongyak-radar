@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
     inputs:
       name: { description: '공고명 일부', required: true }
+      addr: { description: '주소 (API에 없을 때)', required: false }
+      areas: { description: '전용면적 목록 예: 59,79,84', required: false }
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -12,4 +14,4 @@ jobs:
         with: { node-version: 22 }
       - run: npm install --no-audit --no-fund
       - run: node scripts/probe-raw.mjs && node scripts/probe-item.mjs
-        env: { DATA_GO_KR_KEY: "${{ secrets.DATA_GO_KR_KEY }}", KAKAO_REST_KEY: "${{ secrets.KAKAO_REST_KEY }}", PROBE_NAME: "${{ inputs.name }}" }
+        env: { DATA_GO_KR_KEY: "${{ secrets.DATA_GO_KR_KEY }}", KAKAO_REST_KEY: "${{ secrets.KAKAO_REST_KEY }}", PROBE_NAME: "${{ inputs.name }}", PROBE_ADDR: "${{ inputs.addr }}", PROBE_AREAS: "${{ inputs.areas }}" }
