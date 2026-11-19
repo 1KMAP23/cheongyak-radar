@@ -18,7 +18,7 @@ function enrich(raw) {
   const wps = raw.workplaces || [];
   // 직접 입력한 직장은 주소 대신 익명 ID(workplaceId)로 출퇴근 데이터를 찾는다
   const wp = HH?.prefs?.workplaceId ? { id: HH.prefs.workplaceId, name: HH.prefs.workplaceName || '내 직장', custom: true }
-    : HH ? wps.find(w => w.id === HH.prefs?.workplace) || null : wps[0] || null;
+    : wps.find(w => w.id === HH?.prefs?.workplace) || null; // 설정 전에는 직장 없음 (특정 직장을 기본값으로 두지 않는다)
   const weights = HH?.prefs?.weights;
   const regions = HH?.prefs?.regions?.length ? HH.prefs.regions : null;
   const items = [];

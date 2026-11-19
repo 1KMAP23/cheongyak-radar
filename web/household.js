@@ -14,7 +14,7 @@ export async function workplaceId(addr) {
 
 export function householdView(opts) {
   const { app, esc, workplaces, current, onSave, push, onForget, canShare, notice } = opts;
-  const h = current || { prefs: { regions: ['서울', '경기', '인천'], workplace: workplaces[0]?.id || '' }, homeless: true };
+  const h = current || { prefs: { regions: ['서울', '경기', '인천'], workplace: '' }, homeless: true };
   const v = (x, d = '') => (x == null ? d : esc(x));
   const m = x => (x == null || x === '' ? '' : Math.round(x / MAN));
   const kids = h.children?.length ? h.children : [];
@@ -239,7 +239,7 @@ export function householdView(opts) {
   function doImport() {
     const x = findCode($('json').value);
     if (!x) { $('json-err').textContent = '설정 코드를 찾지 못했어요. 받은 코드 전체({ 부터 } 까지)를 그대로 붙여 넣어 주세요.'; return; }
-    x.prefs = { regions: ['서울', '경기', '인천'], workplace: workplaces[0]?.id || null, ...(x.prefs || {}) };
+    x.prefs = { regions: ['서울', '경기', '인천'], workplace: null, ...(x.prefs || {}) };
     // 바로 저장하지 않고 위 칸에 채워서 보여 준다 → 확인·수정 후 저장
     householdView({ ...opts, current: x, notice: '코드를 불러와 아래 칸에 채웠어요. 확인·수정한 뒤 맨 아래 [저장하고 목록 보기]를 눌러야 적용돼요.' });
     window.scrollTo(0, 0);
