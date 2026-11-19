@@ -190,7 +190,7 @@ function rentalCard(it) {
     <div class="row"><span class="rk mono${it.rank <= 3 ? ' top' : ''}">${it.rank}</span><span class="nm">${it.isNew ? '<span class="newb">NEW</span> ' : ''}<span class="place">(${esc(placeFull(it))})</span> ${esc(it.shortName || it.name)}</span><span class="fit mono">${it.fit.total}<small>점</small></span></div>
     <div class="tags"><span class="pill rtype">${RTYPE_ICON[it.rentalType] || '🔑'} ${esc(it.rentalType)}</span>${rtag(it)}</div>
     <div class="verdict-box plain">${rentalComment(it).lines.map((l, i) => `<p class="cl${i === 2 ? ' key' : ''}">${esc(l)}</p>`).join('')}</div>
-    <div class="stats"><span class="st plain"><small>주변 59㎡ 매매가</small><b class="mono">${pl?.at59 ? '~' + won(pl.at59) : '-'}</b></span><span class="st ${tone(it.commuteResult.verdict)}"><small>🚗 출퇴근</small><b class="mono">${c ? c + '분' : '-'}</b></span><span class="st plain"><small>공급</small><b>${esc(it.agency)}</b></span></div>
+    <div class="stats"><span class="st plain"><small>주변 59㎡ 매매가</small><b class="mono">${it.wide ? '단지별' : pl?.at59 ? '~' + won(pl.at59) : '-'}</b></span><span class="st ${it.wide ? 'plain' : tone(it.commuteResult.verdict)}"><small>🚗 출퇴근</small><b class="mono">${it.wide ? '단지별' : c ? c + '분' : '-'}</b></span><span class="st plain"><small>공급</small><b>${esc(it.agency)}</b></span></div>
     <div class="meta">${rdue(it)}<span>${esc(rwindow(it))}</span></div>
   </a>`;
 }
@@ -336,6 +336,7 @@ function verdictLine(it, r) {
 /** 출퇴근 칸: 20분 미만 파랑 · 20~40분 초록 · 40분 초과 빨강 */
 function commuteBox(it) {
   const c = it.commute?.avg;
+  if (it.wide) return `<div class="cbox"><span>🚗 출퇴근</span><small>여러 단지 묶음 공고라 단지마다 달라요${c ? ` (지역 중심 기준 약 ${c}분, 참고만)` : ''}</small></div>`;
   if (!c) return `<div class="cbox"><span>🚗 출퇴근</span><small>${esc(it.commuteResult?.text || '직장 미설정')}</small></div>`;
   const cls = c < 20 ? 'b' : c <= 40 ? 'g' : 'r';
   return `<div class="cbox ${cls}"><span>🚗 ${esc(R.wp?.name || '직장')}까지 <small>출근 ${it.commute.go?.min ?? '-'}분 · 퇴근 ${it.commute.back?.min ?? '-'}분</small></span><b class="mono">평균 ${c}분</b></div>`;
@@ -413,7 +414,7 @@ function detailView(id) {
     <div class="sizes">${[59, 84].map(t => { const z = sizeInfo(it, t); if (!z) return `<div class="size none"><b>${t}㎡</b><span class="sub">이 공고엔 없어요</span></div>`;
       const unsure = z.reliable === false && z.margin != null;
       return `<div class="size ${unsure ? 'mid' : mtone(z.margin)}"><div class="h"><b>${t}㎡</b><small>전용 ${z.area}㎡</small></div>
-        <dl><div><dt>분양가</dt><dd class="mono">${z.lo === z.hi ? won(z.hi) : `${won(z.lo)}~${won(z.hi)}`}</dd></div><div><dt>주변 시세</dt><dd class="mono">${z.estimate ? won(z.estimate) : '-'}</dd></div><div class="m"><dt>안전마진</dt><dd class="mono">${z.margin != null ? sgn(z.margin) + (unsure ? '?' : '') : '시세 부족'}</dd></div>${z.expected ? `<div><dt>예상 시세 <i class="exp">예상치</i></dt><dd class="mono">${won(z.expected.estimate)}</dd></div><div class="m"><dt>예상 마진 <i class="exp">예상치</i></dt><dd class="mono">${sgn(z.expMargin)}</dd></div>` : ''}</dl>${z.expected ? `<small class="sub">예상치 근거: ${esc(z.expected.source)}${z.expected.refs?.length ? ` (${z.expected.refs.map(r => `${esc(r.name)} ${won(r.atArea)}`).join(', ')})` : ''}</small>` : ''}${z.method ? `<small class="sub">${esc(z.method)}${unsure ? (z.thin ? ' · 비교 거래 부족, 참고만' : ' · 편차 커서 참고만') : ''}</small>` : ''}</div>`; }).join('')}</div>
+        <dl><div><dt>분양가</dt><dd class="mono">${z.lo === z.hi ? won(z.hi) : `${won(z.lo)}~${won(z.hi)}`}</dd></div><div><dt>주변 시세</dt><dd class="mono">${z.estimate ? won(z.estimate) : '-'}</dd></div><div class="m"><dt>안전마진</dt><dd class="mono">${z.margin != null ? sgn(z.margin) + (unsure ? '?' : '') : '시세 부족'}</dd></div>${z.expected ? `<div><dt>예상 시세 <i class="exp">예상치</i></dt><dd class="mono">${won(z.expected.estimate)}</dd></div><div class="m"><dt>예상 마진 <i class="exp">예상치</i></dt><dd class="mono">${sgn(z.expMargin)}</dd></div>` : ''}</dl>${z.expected ? `<small class="sub">예상치 근거: ${esc(z.expected.source)}${z.expected.refs?.length ? ` (${z.expected.refs.map(r => `${esc(r.name)} ${won(r.atArea)}`).join(', ')})` : ''}</small>` : ''}${z.expectedRef ? `<small class="sub">참고 예상 시세 ${won(z.expectedRef.estimate)} (마진 ${sgn(z.expectedRef.margin)}) — ${esc(z.expectedRef.doubt || '근거 약함')}이라 점수에 안 넣었어요</small>` : ''}${z.method ? `<small class="sub">${esc(z.method)}${unsure ? (z.thin ? ' · 비교 거래 부족, 참고만' : ' · 편차 커서 참고만') : ''}</small>` : ''}</div>`; }).join('')}</div>
     ${it.hotWhy ? `<div class="hotwhy">🔥 ${esc(it.hotWhy)}</div>` : ''}
     <div class="kpis two">
       ${kpi('출퇴근', it.commute?.avg ? `${it.commute.avg}분` : '-', tone(com.verdict), R.wp ? esc(R.wp.name) : '직장 미설정')}

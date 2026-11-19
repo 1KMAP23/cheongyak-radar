@@ -226,7 +226,7 @@ export function fitScore(it, weights) {
   const m = good ? good.margin : null;
   let mv, mwhy;
   const exp = (it.market || []).filter(r => r.expMargin != null && (Math.abs(r.area - 59) <= 8 || Math.abs(r.area - 84) <= 8)).sort((a, b) => b.expMargin - a.expMargin)[0];
-  if (!good && exp) { mv = exp.expMargin / 3e8; mwhy = `${Math.round(exp.area)}㎡ ${exp.expMargin >= 0 ? '+' : ''}${won(exp.expMargin)} (예상치: ${exp.expected.source})`; }
+  if (!good && exp) { mv = Math.min(exp.expMargin / 3e8, 0.6); mwhy = `${Math.round(exp.area)}㎡ ${exp.expMargin >= 0 ? '+' : ''}${won(exp.expMargin)} (예상치: ${exp.expected.source}) · 실거래가 아닌 예상치라 60%까지만`; }
   else if (!good && rows.length) { mv = 0.15; mwhy = `${rows.map(r => `${Math.round(r.area)}㎡ ${won(r.margin)}`).join('·')}로 나왔지만 시세 비교 신뢰도가 낮아 불확실로 처리`; }
   else if (!good) { mv = 0.15; mwhy = '비교할 거래가 부족해 시세 불확실'; }
   else {
@@ -236,6 +236,14 @@ export function fitScore(it, weights) {
   }
   parts.push({ k: '안전마진', v: sc(mv, W.margin), max: W.margin, why: mwhy });
 
+  // 시·군 단위로 여러 단지를 한꺼번에 모집하는 공고: 지역 중심 기준 값은 실제 단지와 달라서 '알 수 없음'(30%)으로 둔다
+  if (it.wide) {
+    const WIDE = '여러 단지 묶음 모집 — 단지마다 달라서 30%로 둠';
+    parts.push({ k: '출퇴근', v: sc(0.3, W.commute), max: W.commute, why: WIDE }, { k: '매매 가격대', v: sc(0.3, W.price), max: W.price, why: WIDE }, { k: '입지', v: sc(0.3, W.location), max: W.location, why: WIDE });
+    const bz = it.buzzLevel ?? 0;
+    parts.push({ k: 'SNS 화제', v: sc([0, 0.6, 1][bz], W.buzz), max: W.buzz, why: ['언급 보통', '언급 많음', '언급 매우 많음'][bz] });
+    return { total: Math.round(parts.reduce((s, p) => s + p.v, 0)), parts, weights: W };
+  }
   const c = it.commute?.avg;
   const cv = c == null ? 0.2 : c <= 20 ? 1 : c <= 30 ? 0.87 : c <= 40 ? 0.6 : c <= 45 ? 0.47 : c <= 60 ? 0.2 : 0;
   parts.push({ k: '출퇴근', v: sc(cv, W.commute), max: W.commute, why: c == null ? '경로 계산 안 됨' : `평균 ${c}분${it.commute.estimated ? '(추정)' : ''} · 20분 이내 만점, 30분 87% · 40분 60% · 45분 47% · 60분 20%` });
@@ -405,7 +413,7 @@ export function sizeInfo(it, target) {
   const same = ms.filter(m => Math.abs(m.exclusiveArea - target) === near);
   const lo = same.length ? Math.min(...same.map(m => m.topPrice)) : row.price, hi = same.length ? Math.max(...same.map(m => m.topPrice)) : row.price;
   return { area: row?.area ?? Math.round(same[0].exclusiveArea * 10) / 10, lo, hi, margin: row?.margin ?? null, estimate: row?.comp?.estimate ?? null, reliable: row ? row.reliable !== false : true, method: row?.comp?.method, thin: row?.comp?.status === '거래 부족',
-    expected: row?.expected || null, expMargin: row?.expMargin ?? null };
+    expected: row?.expected || null, expMargin: row?.expMargin ?? null, expectedRef: row?.expectedRef || null };
 }
 
 // ───────────────────────── 임대 ─────────────────────────
@@ -529,6 +537,14 @@ export function rentalFit(it, weights) {
   const W = normRentalWeights(weights);
   const sc = (frac, max) => Math.round(Math.max(0, Math.min(1, frac)) * max * 10) / 10;
   const parts = [];
+  // 시·군 단위로 여러 단지를 한꺼번에 모집하는 공고: 지역 중심 기준 값은 실제 단지와 달라서 '알 수 없음'(30%)으로 둔다
+  if (it.wide) {
+    const WIDE = '여러 단지 묶음 모집 — 단지마다 달라서 30%로 둠';
+    parts.push({ k: '출퇴근', v: sc(0.3, W.commute), max: W.commute, why: WIDE }, { k: '매매 가격대', v: sc(0.3, W.price), max: W.price, why: WIDE }, { k: '입지', v: sc(0.3, W.location), max: W.location, why: WIDE });
+    const bz = it.buzzLevel ?? 0;
+    parts.push({ k: 'SNS 화제', v: sc([0, 0.6, 1][bz], W.buzz), max: W.buzz, why: ['언급 보통', '언급 많음', '언급 매우 많음'][bz] });
+    return { total: Math.round(parts.reduce((s, p) => s + p.v, 0)), parts, weights: W };
+  }
   const c = it.commute?.avg;
   const cv = c == null ? 0.2 : c <= 20 ? 1 : c <= 30 ? 0.87 : c <= 40 ? 0.6 : c <= 45 ? 0.47 : c <= 60 ? 0.2 : 0;
   parts.push({ k: '출퇴근', v: sc(cv, W.commute), max: W.commute, why: c == null ? '경로 계산 안 됨' : `평균 ${c}분 · 20분 이내 만점` });

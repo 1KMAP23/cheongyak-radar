@@ -45,6 +45,11 @@ export function makeExpected({ key, kakao, from, log = console.log }) {
       if (refs.length >= 3) break;
     }
     if (!refs.length) return null;
-    return { estimate: Math.round(median(refs.map(r => r.ppm)) * area / 1e6) * 1e6, kind: 'auto', source: `반경 ${(Math.max(...refs.map(r => r.m)) / 1000).toFixed(1)}km 최근 민간 신축 분양가 ${refs.length}곳`, refs };
+    // 믿을 만한가: 참고 단지끼리 ㎡당 분양가 차이 1.35배 이내, 가장 먼 단지 3km 이내, 2곳 이상
+    const ppms = refs.map(r => r.ppm), far = Math.max(...refs.map(r => r.m));
+    const spread = Math.max(...ppms) / Math.min(...ppms);
+    const why = [refs.length < 2 && '참고 단지 1곳뿐', spread > 1.35 && `참고 단지끼리 가격 차이 ${spread.toFixed(1)}배`, far > 3000 && `참고 단지가 ${(far / 1000).toFixed(1)}km까지 멀어요`].filter(Boolean);
+    return { estimate: Math.round(median(ppms) * area / 1e6) * 1e6, kind: 'auto', source: `반경 ${(far / 1000).toFixed(1)}km 최근 민간 신축 분양가 ${refs.length}곳`, refs,
+      spread: Math.round(spread * 100) / 100, confident: !why.length, doubt: why.join(' · ') || null };
   };
 }

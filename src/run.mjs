@@ -165,7 +165,14 @@ for (const it of items) {
         // 실거래로 믿을 만한 시세가 없으면(신도시 등) 주변 민간 신축 분양가로 '예상 시세'를 붙인다
         if (newTown && !reliable && (comp.status === '거래 부족' || !comp.estimate)) {
           const ex = await expectedPrice(it, geo, m.exclusiveArea);
-          if (ex?.estimate) { row.expected = ex; row.expMargin = ex.estimate - m.topPrice - tax - balcony; }
+          if (ex?.estimate) {
+            // 실거래로 잡힌 시세(적더라도)와 35% 넘게 차이 나면 예상치를 믿지 않는다
+            if (ex.confident !== false && comp.estimate && Math.abs(ex.estimate / comp.estimate - 1) > 0.35) { ex.confident = false; ex.doubt = `주변 실거래 시세(${(comp.estimate / 1e8).toFixed(1)}억)와 차이가 커요`; }
+            const em = ex.estimate - m.topPrice - tax - balcony;
+            // 믿을 만한 예상치만 점수·색에 쓰고, 아니면 상세 화면에 참고로만 보여 준다
+            if (ex.confident === false) row.expectedRef = { ...ex, margin: em };
+            else { row.expected = ex; row.expMargin = em; }
+          }
         }
         out.market.push(row);
       }
@@ -221,7 +228,7 @@ for (const r of rentals) {
     for (const q of rentalQuery(r)) { try { geo = await kakao.geocode(q); } catch {} if (geo) break; }
     out.geo = geo;
     // 시·군·구 단위로 여러 단지를 한꺼번에 모집하는 예비입주자 공고는 위치가 대략적이다
-    if (/[시군구]\s*(국민|영구|행복|통합)|예비입주자/.test(r.name) && !/\(.*\)/.test(r.name)) out.analysisNote = '한 지역의 여러 단지를 한꺼번에 모집하는 공고라 위치·출퇴근은 지역 중심 기준이에요. 단지 목록은 공고문에서 확인하세요.';
+    if (/[시군구]\s*(국민|영구|행복|통합)|예비입주자/.test(r.name) && !/\(.*\)/.test(r.name)) out.wide = true, out.analysisNote = '한 지역의 여러 단지를 한꺼번에 모집하는 공고라 위치·출퇴근은 지역 중심 기준이에요. 단지 목록은 공고문에서 확인하세요.';
     if (geo) {
       out.location = await kakao.nearby(geo);
       out.commutes = {};
@@ -245,6 +252,7 @@ if (competitionStatus()) report.notices = [competitionStatus()];
 // 분석 실패 감시: 위치를 찾은 공고 중 시세 분석이 깨진 게 많으면 앱 상단에 경고
 const failed = report.items.filter(i => i.analysisError);
 if (failed.length >= 3) report.warnings.push(`분석 오류 ${failed.length}건: ${failed[0].analysisError}`);
+for (const i of report.items) for (const r of i.market || []) if (r.expectedRef) console.log(`예상 시세(참고만, 점수 미반영) ${i.shortName} ${Math.round(r.area)}㎡: ${(r.expectedRef.estimate / 1e8).toFixed(2)}억 — ${r.expectedRef.doubt}`);
 for (const i of report.items) for (const r of i.market || []) if (r.expected) console.log(`예상 시세 ${i.shortName} ${Math.round(r.area)}㎡: ${(r.expected.estimate / 1e8).toFixed(2)}억 (${r.expected.source}${r.expected.refs?.length ? ': ' + r.expected.refs.map(x => `${x.name} ${(x.atArea / 1e8).toFixed(2)}억 ${(x.m / 1000).toFixed(1)}km`).join(', ') : ''}) → 예상 마진 ${(r.expMargin / 1e8).toFixed(2)}억`);
 // 시세 검산 로그 (공공데이터로 만든 값만, 세대 정보 없음)
 for (const i of report.items.filter(i => i.propertyType || i.mixedUse)) console.log(`유형 ${i.shortName}: ${i.propertyType || '주상복합 추정'} ${i.mixedUse || ''}`);
