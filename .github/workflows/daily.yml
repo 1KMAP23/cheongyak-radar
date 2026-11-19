@@ -1,12 +1,17 @@
 name: daily
 on:
   schedule:
-    # 평일(월~금) 06:40 한국시간에 시작. GitHub 예약은 늦게 시작할 때가 많아서 일찍 돌리고,
+    # 평일(월~금) 06:10 한국시간에 시작. GitHub 예약은 늦게 시작할 때가 많아서 일찍 돌리고,
     # 알림은 아래 push 단계에서 정확히 08:00까지 기다렸다가 보낸다. (UTC 일~목 21:10 = 한국 월~금 06:10)
     - cron: '10 21 * * 0-4'   # 06:10 KST 수집 → 08:00 알림 (GitHub 예약 실행이 1시간 가까이 늦는 날도 있어 여유를 둔다)
     - cron: '0 3 * * 1-5'     # 12:00 KST 데이터만 갱신
     - cron: '0 9 * * 1-5'     # 18:00 KST 데이터만 갱신
   workflow_dispatch:
+    inputs:
+      push:
+        description: '지금 바로 아이폰 알림도 보내기 (테스트용)'
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths: ['src/**', 'web/**', 'scripts/**', 'config/**', '.github/workflows/daily.yml']
@@ -57,7 +62,7 @@ jobs:
         uses: actions/deploy-pages@v4
   push:
     needs: deploy
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '10 21 * * 0-4')
+    if: (github.event_name == 'workflow_dispatch' && inputs.push) || (github.event_name == 'schedule' && github.event.schedule == '10 21 * * 0-4')
     runs-on: ubuntu-latest
     timeout-minutes: 200
     steps:
