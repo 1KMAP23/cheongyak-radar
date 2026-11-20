@@ -1,0 +1,1193 @@
+
+<!-- 20250909 웹호환성 - DOCTYPE는 최상위 템플릿에서 선언 -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<!-- don touch!!  -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="viewport" content="width=device-width, initial-scale=1.0 ,maximum-scale=1.0, minimum-scale=1.0,user-scalable=no,target-densitydpi=medium-dpi" />
+<!-- 20250909 웹표준-->
+<meta name="format-detection" content="telephone=no" />
+
+<!-- all base : CSS -->
+<link rel="stylesheet" type="text/css" href="/resources/_Css/core/jquery-ui-1.9.2.custom.min.css" />
+<link rel="stylesheet" type="text/css" href="/resources/_Css/common/popup.css" /> <!-- 레이어팝업 & 윈도우 팝업 공통 스타일 -->
+
+<!-- all base : JS -->
+<script charset="utf-8" src="/resources/_Js/core/jquery-1.11.3.min.js"> </script>
+<script charset="utf-8" src="/resources/_Js/core/jquery-ui-1.9.2.custom.min.js"></script>
+<script charset="utf-8" src="/resources/_Js/jquery-ui-timepicker-addon.js"></script>
+<script charset="utf-8" src="/resources/_Js/common.js"></script>
+
+<script charset="utf-8" src='/resources/_Js/core/common_base_util.js'></script>
+<script charset="utf-8" src="/resources/_Js/browser.detect.js"></script><!-- 방문자통계에서 필요한 스크립트파일 -->
+
+<script charset="utf-8" src="/resources/_Plugin/jquery.TabMenu/jquery.TabMenu.js"></script><!-- 텝메뉴 플러그인 -->
+<script charset="utf-8" src="/resources/_Js/comm.LayerPopup.js"></script><!-- 레이어 팝업 플러그인 -->
+<!-- configuration -->
+<link rel="stylesheet" type="text/css" href="/resources/_Css/common/common.css?">
+<link rel="stylesheet" type="text/css" href="/resources/_Css/common/webfont.css">
+<link rel="stylesheet" type="text/css" href="/resources/_Css/common/board.css?">
+<link rel="stylesheet" type="text/css" href="/resources/_Css/common/board.rspnsv.css?">
+<link rel="stylesheet" type="text/css" href="/resources/_Css/common/prg.style.css?">
+
+
+<!-- 스크롤디자인 플러그인 -->
+<script type="text/javascript" src="/resources/_Js/jquery/jquery.mCustomScrollbar.js"></script>
+<link rel="stylesheet" type="text/css" href="/resources/_Css/plugin/jquery.mCustomScrollbar.css" />
+
+	
+<!-- 방문자 통계 -->
+<script type="text/javascript">
+//	onVisit('kor');
+</script>
+
+ 	<link rel="stylesheet" type="text/css" href="/resources/_Css/common/style.default.css">
+	<link rel="stylesheet" type="text/css" href="/resources/_Css/common/content.default.css">
+	<link rel="stylesheet" type="text/css" href="/resources/homepage/kor/_Css/common.css">
+<script type="text/javascript" src="/resources/homepage/kor/_Js/common.js"></script>
+
+
+<!-- 이미지슬라이드 플러그인 -->
+<script type="text/javascript" src="/resources/_Js/jquery/owl.carousel.min.js"></script>
+<link rel="stylesheet" type="text/css" href="/resources/_Css/plugin/owl.carousel.min.css" />
+<link rel="stylesheet" type="text/css" href="/resources/_Css/plugin/owl.theme.default.min.css" />
+
+
+<script src="/resources/_Templet/Layout/layout_kor/Js/common.js"></script><!-- //don touch!!  -->
+
+	
+			<meta name="title" content="종합정보포털" />
+			<meta name="format-detection" content="telephone=no" />
+	
+	
+	<!-- Favicon 설정 -->
+	 	<link rel="shortcut icon" href="/resources/_Img/Common/favicon.ico">
+		<link rel="icon"  href="/resources/_Img/Common/favicon.ico">
+		<link rel="apple-touch-icon"  href="/resources/_Img/Common/favicon.ico">
+	<!-- Title 설정 -->
+
+		<title>광역교통계획 | 남양주 왕숙 | 주요지구 현황 | 3기 신도시</title>
+	
+
+
+
+		<!--  서브페이지 경우-->
+		
+		<!-- 공통 CSS -->
+		<link rel="stylesheet" type="text/css" href="/resources/_Css/main/css/default.css">
+		<link rel="stylesheet" type="text/css" href="/resources/_Css/main/css/slick.css">
+		<link rel="stylesheet" type="text/css" href="/resources/_Css/main/css/font.css">
+		<link rel="stylesheet" type="text/css" href="/resources/_Css/main/css/animate.min.css">
+		<link rel="stylesheet" type="text/css" href="/resources/_Css/main/css/common.css">
+		<link rel="stylesheet" type="text/css" href="/resources/_Css/main/css/sub.css">
+
+
+		<!-- 공통 JS -->
+		<script type="text/javascript" src="/resources/_Js/main/lh/jquery-2.2.1.min.js"></script>
+		<script type="text/javascript" src="/resources/_Js/main/lh/placeholders.min.js"></script>
+		<script type="text/javascript" src="/resources/_Js/main/lh/common.js"></script>
+		<script type="text/javascript" src="/resources/_Js/main/lh/slick.min.js"></script>
+
+
+	<script>
+		var currentAddress = location.href;
+		var isDevelopMode = "Y"
+		if( isDevelopMode != "Y" && false ){
+			if( currentAddress.indexOf( "http://" ) > -1 ){
+				currentAddress = currentAddress.replace("http://","https://");
+				location.href = currentAddress;
+			}
+		}
+		function smartSearchForm() {
+			var s = document.frm.searchKeyword.value;
+			if(s.trim()=="") {
+				alert("검색어를 입력해주세요.");
+				document.frm.searchKeyword.focus();
+				return false;
+			}else{
+				 document.frm.submit();
+			}
+		}
+		
+		
+		// 본문바로가기 - 페이지에 따라 존재하는 영역으로 이동
+	document.addEventListener('DOMContentLoaded', function() {
+		var skipLink = document.getElementById('skip-to-content');
+		if (skipLink) {
+			skipLink.addEventListener('click', function(e) {
+				e.preventDefault();
+				// 우선순위: contents > subCont > subTop > gnb
+				var targets = ['contents', 'subCont', 'subTop', 'gnb'];
+				for (var i = 0; i < targets.length; i++) {
+					var target = document.getElementById(targets[i]);
+					if (target) {
+						target.setAttribute('tabindex', '-1');
+						target.focus();
+						target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+						break;
+					}
+				}
+			});
+		}
+	});
+	</script>
+	
+<style>
+/* 기본: 모바일 전용 버튼은 숨김 */
+.gnbAplyBox.mobile-only {
+    display: none !important;
+}
+
+@media (max-width: 768px) {
+
+    /* 모바일에서만 노출 */
+    .gnbAplyBox.mobile-only {
+        display: flex !important;
+    }
+
+    /* gnb 열렸을 때 숨길 필요가 있으면 사용 */
+    .gnbWrap.on.wh .gnbAplyBox {
+        visibility: hidden;
+        opacity: 0;
+        pointer-events: none; /* 안 보일 때 클릭도 막기 */
+    }
+
+    /* gnbAplyBox 공통 레이아웃 (모바일) */
+    .gnbAplyBox {
+        display: flex;
+        padding: 20px;
+        gap: 4px;
+    }
+
+    .gnbAplyBox a.gnbAplybtn {
+        color: #fff !important;
+        text-decoration: none;
+    }
+
+    /* hidden 클래스로 완전히 접을 때 */
+    .gnbAplyBox.hidden {
+        display: none !important; /* [수정 2026-10-07] 줄 끝 오타 문자(백틱) 제거 (변경 전: display: none !important;`) */
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    /* 버튼 스타일 */
+    .gnbAplybtn {
+        /* width: auto; 와 fit-content 중 하나만 쓰기 */
+        width: auto;
+        /* 필요하면 아래 주석 해제해서 사용
+        width: fit-content;
+        */
+
+        pointer-events: auto;       /* 버튼은 클릭 가능 */
+        padding: 0 20px;
+        height: 36px;
+        line-height: 36px;
+        word-break: keep-all;
+        color: #fff;
+        text-align: center;
+        margin: 0;
+        position: relative;
+        font-size: 10pt;
+        border-radius: 20px;
+
+        /* 최신 브라우저용 그라디언트만 남김 (W3C 에러 감소) */
+        background: linear-gradient(to right, #1f89a1 0%, #46a987 100%);
+    }
+}
+
+</style>
+</head>
+
+<body>
+	<!-- 서브페이지 경우
+	<div id="skip">
+		<a href="#subTop"><span>본문 바로가기</span></a>
+	</div>-->
+
+	<!--스킵네비게이션 영역-->
+	<!--<div class="user-skip" id="skip-navi">
+		<a href="#" id="skip-to-content" tabindex="1"><span>본문바로가기</span></a>
+	</div>-->
+	
+
+	<!-- wrap -->
+	<div id="wrap">
+		<!-- 윈도우 팝업 -->
+		<!-- 윈도우 팝업// -->
+		
+	
+	<!--	<div id="skipNavi">
+    		<h1 class="blind">스킵네비게이션</h1>
+		    <ul>
+		        	<li><a href="#gnb" class="skipLink">본문바로가기</a></li>
+		        <li><a href="#main01" class="skipLink">주메뉴바로가기</a></li>
+		    </ul>
+		</div> -->
+	
+		
+		<!-- 상단팝업 -->
+
+		<!-- 상단팝업 // -->
+		
+		<!-- datalist owl-carousel -->
+		<div class="datalist owl-carousel">
+		</div>
+		<!-- datalist owl-carousel// -->
+		
+			<!-- gnb -->
+			<div id="gnb">
+				<h1 class="gnbLogo"><a href="/kor/Main.do">3기 신도시</a></h1>
+				<button class="gnbMo" aria-expanded="false" aria-label="전체메뉴">
+					<span>전체메뉴 열기</span>
+					<em></em>
+					<em></em>
+					<em></em>
+				</button>
+				<div class="gnbWrap">
+
+			<div>
+				<div>
+					<div class="gnbAplyBox mobile-only">
+					<a href="/kor/CMS/CtznPrtcp/list.do?mCode=MN187" class="gnbAplybtn">국민참여</a>
+					<a href="http://bizmap.lh.or.kr" target="_blank" class="gnbAplybtn" title="새창열기">LH집어디</a>
+        			</div>		
+					<ul class="gnbMenu">
+						
+
+
+								
+								<li class="">
+									<a href="javascript:void(0)"  aria-expanded="false" role="button">신도시 소개</a><span></span>
+							<!-- <div class="gnbDepth" style="top:84px"> -->
+								<div class="gnbDepth" >
+									<div>							
+										<ul>
+
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN036"  class="" >3기신도시란?</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN037"  class="" >3기 신도시 위치</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN094"  class="" >조성방안</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN181"  class="" >신도시스토리</a></li>
+
+							
+
+
+											</ul>
+										</div>
+									</div>
+								</li>
+								
+								<li class="current">
+									<a href="javascript:void(0)" aria-current="page" title="선택됨" aria-expanded="false" role="button">주요지구 현황</a><span></span>
+							<!-- <div class="gnbDepth" style="top:84px"> -->
+								<div class="gnbDepth" >
+									<div>							
+										<ul>
+
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN030"  class="current" aria-current="page" title="선택됨">남양주 왕숙</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN039"  class="" >남양주 왕숙2</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN050"  class="" >하남 교산</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN056"  class="" >인천 계양</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN074"  class="" >고양 창릉</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN068"  class="" >부천 대장</a></li>
+
+							
+
+
+											</ul>
+										</div>
+									</div>
+								</li>
+								
+								<li class="">
+									<a href="javascript:void(0)"  aria-expanded="false" role="button">무엇이 달라지나</a><span></span>
+							<!-- <div class="gnbDepth" style="top:84px"> -->
+								<div class="gnbDepth" >
+									<div>							
+										<ul>
+
+
+
+							
+									<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN133"  class="" >미리보는 3기 신도시</a></li>
+
+
+							
+									<li><a  href="https://hanaro.lh.or.kr/" target="_blank" title="새창열림"  class="" >미리보는 내 집</a></li>
+
+							
+
+
+											</ul>
+										</div>
+									</div>
+								</li>
+								
+								<li class="">
+									<a href="javascript:void(0)"  aria-expanded="false" role="button">청약안내</a><span></span>
+							<!-- <div class="gnbDepth" style="top:84px"> -->
+								<div class="gnbDepth" >
+									<div>							
+										<ul>
+
+
+
+							
+									<li><a  href="/kor/CMS/AreanoticeMgr/list.do?mCode=MN123"  class="" >청약일정알리미</a></li>
+
+
+							
+									<li><a  href="https://apply.lh.or.kr/lhapply/cm/cntnts/cntntsView.do?mi=1178&cntntsId=1048" target="_blank" title="새창열림"  class="" >자격조건과 선정방식</a></li>
+
+							
+
+
+											</ul>
+										</div>
+									</div>
+								</li>
+								
+								<li class="">
+									<a href="javascript:void(0)"  aria-expanded="false" role="button">뉴스·소식</a><span></span>
+							<!-- <div class="gnbDepth" style="top:84px"> -->
+								<div class="gnbDepth" >
+									<div>							
+										<ul>
+
+
+
+							
+									<li><a  href="/kor/CMS/Board/Board.do?mCode=MN023"  class="" >공지사항</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Board/Board.do?mCode=MN024"  class="" >보도자료</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Board/Board.do?mCode=MN121"  class="" >홍보영상</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Board/Board.do?mCode=MN122"  class="" >카드뉴스</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Board/Board.do?mCode=MN138"  class="" >이벤트</a></li>
+
+							
+
+
+											</ul>
+										</div>
+									</div>
+								</li>
+								
+								<li class="">
+									<a href="javascript:void(0)"  aria-expanded="false" role="button">자료실</a><span></span>
+							<!-- <div class="gnbDepth" style="top:84px"> -->
+								<div class="gnbDepth" >
+									<div>							
+										<ul>
+
+
+
+							
+									<li><a  href="/kor/CMS/Board/Board.do?mCode=MN112"  class="" >주요 정책</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Board/Board.do?mCode=MN111"  class="" >고시/공고</a></li>
+
+
+							
+									<li><a  href="/kor/CMS/Board/Board.do?mCode=MN083"  class="" >법령정보</a></li>
+
+							
+
+											</ul>
+										</div>
+									</div>
+								</li>
+					</ul>
+					
+
+				</div>
+				<!-- <div class="gnbBg" id="gnbBg" style="top:84px"></div> -->
+				<div class="gnbBg" id="gnbBg" ></div>
+			</div>
+
+					<ul class="gnbmBot">
+						<li><a href="/kor/CMS/TotalSearch/total.do?mCode=MN092" class="gnbSch">검색</a></li>
+						<li><a href="/kor/CMS/AreanoticeMgr/list.do?mCode=MN123">알림서비스 신청</a></li>
+					</ul>
+					<!-- <a href="http://사전청약.kr" target="_blank" class="gnbAply">사전청약 홈페이지</a>		-->	
+					<a href="/kor/CMS/CtznPrtcp/list.do?mCode=MN187" class="gnbAply ctz">국민참여</a>
+					<a href="http://bizmap.lh.or.kr" target="_blank" title="새창열림" class="gnbAply lh">LH집어디</a>
+					<form id="gnbSearchForm" class="gnbSchForm" role="search" action="/kor/CMS/TotalSearch/total.do" method="post">
+						<input type="hidden" name="mCode" value="MN092">
+						<label for="gnbSearchKeyword" class="hidden">통합검색 검색어 입력</label>
+						<input type="text" id="gnbSearchKeyword" name="searchKeyword" placeholder="검색어를 입력하세요" autocomplete="off">
+						<button type="submit" aria-label="검색" title="검색"></button>
+					</form>
+				</div><!-- gnbWrap -->
+			</div>
+			<!-- gnb -->
+		
+		<!-- nowMenuInfo -->
+			<!-- 서브비쥬얼 개발필요 -->
+			<div id="subTop">
+				<!-- if topmenuList -->
+
+
+								<div class="sbtBan jigu" style="background:url('/resources/_Img/img/sub/subTop_bg_jigu01.jpg')no-repeat center center;">
+									<div>
+										<div>
+											<div class="container">
+												<h2>&nbsp;&nbsp;수도권 동북부의<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;거점이 되는 경제중심도시</h2>
+											</div>
+										</div>
+									</div>
+								</div>
+							<!--부천대장-->
+							
+							
+							<!-- 의왕·군포·안산 -->
+							
+							<!-- 화성 진안 -->
+							
+							<!-- 인천 구월2 -->
+							  
+							<!-- 화성 봉담3 -->
+							
+							
+							
+							
+							
+							
+							
+
+
+<!-- 
+							<div class="sbtBan jigu" style="background:url('/attach/IMAGE/UserMenu/SubVisauImg/2020/10/IAHIZeHlIByebDFz.JPG')no-repeat center center;">
+								<div>
+									<div>
+										<div class="container">
+												<h2>수려한 경관 속<br/>&nbsp;&nbsp;&nbsp;&nbsp;청년문화예술도시</h2>
+											<h2>
+											</h2>
+										</div>
+									</div>
+								</div>
+							</div>
+-->
+				<!-- if topmenuList// -->
+				
+				<!-- 메뉴네비게시연 개발필요 -->
+				<ul class="sbtNav">
+					<li><a href="/kor/Main.do">HOME</a></li>
+											<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN030" ><span class="stnArw">주요지구 현황</span></a></li>
+											<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN030" ><span class="stnArw">남양주 왕숙</span></a></li>
+											<li><a  href="/kor/CMS/Contents/Contents.do?mCode=MN095" ><span class="">광역교통계획</span></a></li>
+				</ul>
+			</div>
+			<!-- subTop -->
+			
+			<!-- S : TABMENU 주요지구현황만 사용//-->
+								<div class="jiguTop">
+									<div class="container">
+										<!-- 3차메뉴 -->
+
+			<div class="jiguTab">
+				<!--3차탭메뉴 개발필요 -->
+				<ul class="slyList">
+
+			
+
+
+
+
+				
+
+
+
+
+						
+						
+								
+								
+									
+									<!-- 새창링크면 nw 클래스 추가 --> 
+									
+								
+								
+							
+						
+								
+								
+								
+								
+							
+						
+								
+								
+								
+								
+							
+						
+								
+								
+								
+								
+							
+						
+								
+								
+								
+								
+							
+						
+								
+								
+								
+								
+							
+
+				
+
+			
+
+			
+
+			
+
+
+
+
+						
+						
+								
+								
+								
+
+								<!-- #if menu_info.cont_seq! == 0 -->
+								<li class="">
+		
+			
+	
+										<a  href="/kor/CMS/Contents/Contents.do?mCode=MN030" >지구개요</a>
+	
+								</li>
+								
+							
+						
+								
+								
+								
+
+								<!-- #if menu_info.cont_seq! == 0 -->
+								<li class="">
+		
+			
+	
+										<a  href="/kor/CMS/Contents/Contents.do?mCode=MN031" >기본구상공모</a>
+	
+								</li>
+								
+							
+						
+								
+								
+								
+
+								<!-- #if menu_info.cont_seq! == 0 -->
+								<li class="">
+		
+			
+	
+										<a  href="/kor/CMS/Contents/Contents.do?mCode=MN033" >토지이용계획</a>
+	
+								</li>
+								
+							
+						
+								
+								
+									
+									<!-- 새창링크면 nw 클래스 추가 --> 
+									
+								
+
+								<!-- #if menu_info.cont_seq! == 0 -->
+								<li class="current">
+		
+			
+	
+										<a  href="/kor/CMS/Contents/Contents.do?mCode=MN095"  title="선택됨" aria-current="page">광역교통계획</a>
+	
+								</li>
+								
+							
+
+				
+			
+			
+			
+				</ul>
+			</div>	
+
+
+<!-- 2차메뉴만 뿌리기 -->
+
+
+<!-- 2차메뉴만 뿌리기 -->
+										<!-- 2차메뉴 -->
+
+
+			<div class="jiguTitle">
+				<!--2차메뉴명 개발필요 -->
+
+<h3>남양주 왕숙</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<div class="jiguSel">
+
+							<!--2차메뉴가 주요지구소개일때만 개발필요 -->
+							<button type="button" aria-expanded="false" title="지역 목록 열기">지역변경</button>
+
+
+					<ul>
+					<!--2차탭메뉴 개발필요 -->
+
+			
+
+
+
+
+				
+
+
+
+
+						
+						
+								
+								
+									
+									<!-- 새창링크면 nw 클래스 추가 --> 
+									
+								
+
+								<!-- menu_info.cont_seq! &gt; 0 -->
+								<li >
+		
+			
+		
+			
+		
+			
+	
+	
+	
+										<a  href="/kor/CMS/Contents/Contents.do?mCode=MN030" >남양주 왕숙</a>
+	
+								</li>
+								
+							
+						
+								
+								
+								
+
+								<!-- menu_info.cont_seq! &gt; 0 -->
+								<li >
+		
+			
+		
+			
+		
+			
+	
+	
+	
+										<a  href="/kor/CMS/Contents/Contents.do?mCode=MN039" >남양주 왕숙2</a>
+	
+								</li>
+								
+							
+						
+								
+								
+								
+
+								<!-- menu_info.cont_seq! &gt; 0 -->
+								<li >
+		
+			
+		
+			
+		
+			
+	
+	
+	
+										<a  href="/kor/CMS/Contents/Contents.do?mCode=MN050" >하남 교산</a>
+	
+								</li>
+								
+							
+						
+								
+								
+								
+
+								<!-- menu_info.cont_seq! &gt; 0 -->
+								<li >
+		
+			
+		
+			
+		
+			
+	
+	
+	
+										<a  href="/kor/CMS/Contents/Contents.do?mCode=MN056" >인천 계양</a>
+	
+								</li>
+								
+							
+						
+								
+								
+								
+
+								<!-- menu_info.cont_seq! &gt; 0 -->
+								<li >
+		
+			
+		
+			
+		
+			
+	
+	
+	
+										<a  href="/kor/CMS/Contents/Contents.do?mCode=MN074" >고양 창릉</a>
+	
+								</li>
+								
+							
+						
+								
+								
+								
+
+								<!-- menu_info.cont_seq! &gt; 0 -->
+								<li >
+		
+			
+		
+			
+		
+			
+	
+	
+	
+										<a  href="/kor/CMS/Contents/Contents.do?mCode=MN068" >부천 대장</a>
+	
+								</li>
+								
+							
+
+				
+
+			
+
+			
+
+			
+
+
+
+
+						
+						
+								
+								
+								
+								
+							
+						
+								
+								
+								
+								
+							
+						
+								
+								
+								
+								
+							
+						
+								
+								
+									
+									<!-- 새창링크면 nw 클래스 추가 --> 
+									
+								
+								
+							
+
+				
+			
+			
+			
+					</ul>
+				</div>
+			</div>		
+
+
+<!-- 2차메뉴만 뿌리기 -->
+
+
+<!-- 2차메뉴만 뿌리기 -->
+									</div>
+								</div><!-- jiguTop -->
+			<!-- E : TABMENU //-->
+			
+			<!-- div:layout-subCont -->
+			<div id="subCont">
+
+
+	<div class="contents_view_wrap">
+<div class="jiguInfo">
+<div class="container">
+<dl>
+<dt>지구명</dt>
+<dd>남양주왕숙 공공주택지구</dd>
+</dl>
+<dl>
+<dt>면적</dt>
+<dd>전체면적 : 10,294,200㎡ <span>(3,114천평)</span> <!-- <p class="sm">본단지 : 8,654,278㎡<span>(2,618천평)</span><br/>기업이전단지 : 722,630㎡<span> --></dd>
+</dl>
+<dl>
+<dt>사업시행기간</dt>
+<dd>지구지정(‘19년) ~ 사업준공(예정)(‘28년)
+<p>*위 사업시행 기간과 달리 지구별 사전청약 일정 등은 별도 공고 등을 통해 안내될 예정</p>
+</dd>
+</dl>
+<dl>
+<dt>위치</dt>
+<dd>경기도 남양주시 진접읍 연평리, 내곡리, 내각리, 진건읍 신월리, 진관리, 사능리, 용정리, 송능리, 배양리, 퇴계원읍 퇴계원리 일원</dd>
+</dl>
+<dl>
+<dt>사업시행자</dt>
+<dd>경기도, 한국토지주택공사, 경기도주택도시공사</dd>
+</dl>
+<dl>
+<dt>인구 및 주택계획</dt>
+<dd>주택 52천 호, 인구 130천 인</dd>
+</dl>
+</div>
+</div>
+<div class="container">
+<div class="jiguNoti">
+<div>
+<h5>뉴스·소식</h5>
+<p><a href="https://www.xn--3-3u6ey6lv7rsa.kr/kor/CMS/Board/Board.do?mCode=MN024&mode=view&mgr_seq=12&board_seq=294">남양주왕숙, 하남교산 3기 신도시 지구계획 수립 완료</a></p>
+</div>
+</div>
+</div>
+<!-- <span class="jiguScr">SCROLL</span> -->
+<div class="jiguTrfc">
+<div class="container">
+<div class="icoTitle"><em style="background: url('/resources/_Img/img/sub/title_ico01.png')no-repeat center center;"></em>
+<h4>광역교통계획</h4>
+</div>
+<div class="jgtWrap">
+<div class="jgtMap"><img alt="" src="/attach/EDITOR/IMAGE/2025/7/RJfpeiVVpWtVBroaiTdM.jpg" org_width="960" org_height="1346" width="960" zoomview="0" /></div>
+<div class="jgtTxt">
+<h5>주요내용</h5>
+<ul>
+<li><em>가</em><b>별내선 연장</b>(별내역∼진접선)</li>
+<li><em>나</em><b>경춘선 역사 신설</b>(GTX-B 정차)</li>
+<li><em>다</em><b>경의중앙선 역사 신설</b></li>
+<li><em>라</em><b>서울 강동~하남~남양주간 도시철도 건설사업</b></li>
+<li><em>마</em><b>상봉~마석간 셔틀열차</b></li>
+<li><em>바</em><b>강변북로 대중교통개선</b></li>
+<li><em>사</em><b>경춘선 신설역사 환승시설</b></li>
+<li><em>아</em><b>경의중앙선 신설역사 환승시설</b></li>
+<li><em>1-A</em> <b>한강교량신설</b></li>
+<li><em>1-B</em><b>올림픽대로 확장</b></li>
+<li><em>1-C</em><b>강일IC하부 병목구간 개선</li>
+<li><em>2-1</em><b>지방도383호선 확장</b>(사업지계~도농사거리)</li>
+<li><em>2-2</em><b>진관IC 개선</li>
+<li><em>3-1</em><b>올림픽대로 확장</b>(암사IC~강동IC)</li>
+<li><em>3-2</em><b>강일IC 우회도로 신설</b></li>
+<li><em>4</em><b>진관교 확장</b></li>
+<li><em>5</em><b>연결도로 신설</b>(왕숙2~양정역세권)</li>
+<li><em>6</em><b>연계도로 신설</b>(왕숙2~다산)</li>
+<li><em>7</em><b>구국도 46호선 확장</b>(진안4~금곡4)</li>
+<li><em>8</em><b>경춘북로 확장</b>(퇴계원4~진관교)</li>
+<li><em>9</em><b>북부간선도로 확장</b>(인창IC~구리IC)</li>
+<li><em>10</em><b>국지도86호선 확장</b>(먹골IC~진안사거리)</li>
+<li><em> </em> <b>대중교통 지원</b></li>
+</ul>
+</div>
+</div>
+<p class="mt20" style="font-size: 14pt;">※ 세부노선 및 위치는 향후 기본계획, 설계 등 과정에서 확정예정</p>
+</div>
+</div>		
+	</div>	
+	
+	
+
+
+			</div>
+			<!-- div: subCont -->
+		<!-- nowMenuInfo// -->
+		
+		<!-- nowMenuInfo -->
+			<!-- 서브페이지 경우-->
+			<!-- footer-wrap -->
+			<!-- 푸터 영역 시작 -->
+			<div id="footer">
+				<div id="ftTop">
+					<div class="container">
+						<div class="ftBan">					
+							<div class="ftSlider">
+								<a href="http://www.molit.go.kr" target="_blank" title="국토교통부 새창열림"><img src="/resources/_Img/img/common/footer_family01.png" alt="국토교통부"></a>
+								<a href="https://www.gg.go.kr" target="_blank" title="경기도 새창열림"><img src="/resources/_Img/img/common/footer_family02.png" alt="경기도"></a>
+								<a href="https://www.incheon.go.kr" target="_blank" title="인천광역시 새창열림"><img src="/resources/_Img/img/common/footer_family02_1.png" alt="인천광역시"></a>
+		<!--						<a href="http://www.goyang.go.kr" target="_blank" title="고양시 새창열림"><img src="/resources/_Img/img/common/footer_family03_0.png" alt="고양시"></a>
+								<a href="https://www.gccity.go.kr" target="_blank" title="과천시 새창열림"><img src="/resources/_Img/img/common/footer_family03.png" alt="과천시"></a>
+								<a href="https://www.nyj.go.krr" target="_blank" title="남양주시 새창열림"><img src="/resources/_Img/img/common/footer_family03_2.png" alt="남양주시"></a>
+								<a href="http://www.bucheon.go.kr" target="_blank" title="부천시 새창열림"><img src="/resources/_Img/img/common/footer_family03_3.png" alt="부천시"></a>
+								<a href="https://www.ansan.go.kr" target="_blank" title="안산시 새창열림"><img src="/resources/_Img/img/common/footer_family04_5.png" alt="안산시"></a>
+								<a href="https://www.gccity.go.kr" target="_blank" title="하남시 새창열림"><img src="/resources/_Img/img/common/footer_family04_6.png" alt="하남시"></a>-->
+								<a href="https://www.lh.or.kr" target="_blank" title="한국토지주택공사 새창열림"><img src="/resources/_Img/img/common/footer_family04.png" alt="한국토지주택공사"></a>
+								<a href="https://www.gh.or.kr" target="_blank" title="경기주택도시공사 새창열림"><img src="/resources/_Img/img/common/footer_family05.png" alt="경기주택도시공사"></a>
+								<a href="https://www.ih.co.kr" target="_blank" title="인천도시공사 새창열림"><img src="/resources/_Img/img/common/footer_family06.png" alt="인천도시공사"></a>
+								<a href="http://www.gys.or.kr" target="_blank" title="고양도시관리공사 새창열림"><img src="/resources/_Img/img/common/footer_family07.png" alt="고양도시공사"></a>
+								<a href="https://www.gcuc.or.kr" target="_blank" title="과천도시공사 새창열림"><img src="/resources/_Img/img/common/footer_family07_1.png" alt="과천도시공사"></a>
+								<a href="https://www.ncuc.or.kr" target="_blank" title="남양주도시공사 새창열림"><img src="/resources/_Img/img/common/footer_family07_2.png" alt="남양주도시공사"></a>
+								<a href="http://www.best.or.kr/" target="_blank" title="부천도시공사 새창열림"><img src="/resources/_Img/img/common/footer_family08.png" alt="부천도시공사"></a>
+								<a href="https://www.ansanuc.net" target="_blank" title="안산도시공사 새창열림"><img src="/resources/_Img/img/common/footer_family08_1.png" alt="안산도시공사"></a>
+								<a href="https://www.huic.co.kr/" target="_blank" title="하남도시공사 새창열림"><img src="/resources/_Img/img/common/footer_family08_2.png" alt="하남도시공사"></a>
+							</div>
+							<div class="ftNav">
+								<button type="button" class="ftPlay" title="일시정지" aria-label="슬라이드 일시정지">일시정지</button>
+								<div class="ftArrow"></div>						
+							</div>
+						</div>
+					</div>
+				</div><!-- ftTop -->
+
+				<div id="ftBt">
+					<div class="container">
+						<ul class="ftbSns">
+							<li><a href="https://www.youtube.com/user/korealand"  target="_blank" title="국토교통부 공식 유튜브 채널 새창열림"  class="facebook"><span><img src="/resources/_Img/img/common/footer_sns03.png" alt="국토교통부 공식 유튜브 채널"></span></a></li>
+							<li><a href="https://blog.naver.com/mltmkr?proxyReferer=http%3A%2F%2Fwww.molit.go.kr%2F"  target="_blank" title="국토교통부 공식블로그 새창열림"  class="insta"><span><img src="/resources/_Img/img/common/footer_sns04.png" alt="국토교통부 공식블로그"></span></a></li>
+							<li><a href="https://www.facebook.com/landkorea"  target="_blank" title="국토교통부 공식 페이스북 새창열림"  class="youtube"><span><img src="/resources/_Img/img/common/footer_sns01.png" alt="국토교통부 공식 페이스북"></span></a></li>
+							<li><a href="https://www.molit.go.kr/USR/policyData/m_34681/lst.jsp"  target="_blank" title="국토교통부 정책정보 목록 홈페이지 새창열림"  class="daumcafe"><span><img src="/resources/_Img/img/common/footer_sns05.png" alt="국토교통부 정책정보 목록 홈페이지 새창열림"></span></a></li>
+						</ul>
+						<div class="ftbLeft">
+							<p class="ftbLogo">3기 신도시</p>
+							<a class="ftbWALogo" href="http://www.webwatch.or.kr/Situation/WA_Situation.html?MenuCD=110" target ="_blank" title="국가 공인 인증기관 : 웹와치 새창열림"><p>웹접근성 인증마크</p></a>
+							
+							<ul class="ftbMenu">
+								<!-- 개인정보처리방침 -->
+								<li><a href="/kor/CMS/Contents/Contents.do?mCode=MN010" target="_blank" title="새창열림" class="privacy"><b>개인정보처리방침</b></a></li>
+								<!-- 이메일무단수집거부 -->
+								<li><a href="/kor/CMS/Contents/Contents.do?mCode=MN012" target="_blank" title="새창열림" class="terms">이메일무단수집거부</a></li>
+								<!-- 사이트맵 -->
+								<li><a href="/kor/CMS/SiteMap/SiteMap.do?mCode=MN013" target="_blank" title="새창열림" class="sitemap">사이트맵</a></li>
+							</ul>
+							<p class="ftbAddr">52852) 경상남도 진주시 충의로 19(충무공동)  <span>TEL 1600-1004  FAX 055-922-5170(문서과)</span></p>
+							<p class="ftbCopy">&copy;2020 BY KOREA LAND & HOUSING CORPORATION.</p>
+						</div>
+
+						<div class="ftbRht">					
+							<div class="ftbFmly">
+								<button type="button" aria-expanded="false">FAMILY SITE</button>
+								<ul>
+									<li><a href="http://www.molit.go.kr" target="_blank" title="새창열림"><span>국토교통부</span></a></li>
+									<li><a href="https://www.gg.go.kr" target="_blank" title="새창열림"><span>경기도</span></a></li>
+									<li><a href="https://www.incheon.go.kr" target="_blank" title="새창열림"><span>인천광역시</span></a></li>
+									<li><a href="http://www.lh.or.kr" target="_blank" title="새창열림"><span>한국토지주택공사</span></a></li>
+									<li><a href="https://www.gh.or.kr" target="_blank" title="새창열림"><span>경기주택도시공사</span></a></li>
+									<li><a href="https://www.ih.co.kr" target="_blank" title="새창열림"><span>인천도시공사</span></a></li>
+									<li><a href="http://www.gys.or.kr" target="_blank" title="새창열림"><span>고양도시관리공사</span></a></li>
+									<li><a href="https://www.gcuc.or.kr" target="_blank" title="새창열림"><span>과천도시공사</span></a></li>
+									<li><a href="https://www.ncuc.or.kr" target="_blank" title="새창열림"><span>남양주도시공사</span></a></li>
+									<li><a href="https://www.ansanuc.net" target="_blank" title="새창열림"><span>안산도시공사</span></a></li>
+									<li><a href="http://www.best.or.kr" target="_blank" title="새창열림"><span>부천도시공사</span></a></li>
+									<li><a href="https://www.huic.co.kr" target="_blank" title="새창열림"><span>하남도시공사</span></a></li>
+								</ul>
+							</div>
+						</div>
+					</div>
+				</div><!-- ftBk -->
+			</div>
+			<!-- 푸터영역 끝 -->
+			<!-- footer-wrap //-->
+			<script type="text/javascript" src="/resources/_Js/main/lh/jquery.easing.1.2.js"></script>
+			<script type="text/javascript" src="/resources/_Js/main/lh/sly.min.js"></script>
+			
+			<!-- S : TABMENU 주요지구현황만 사용//-->
+							<!-- 3차메뉴 미리보는 3기신도시 -->
+							<!-- 그외 -->
+
+
+					<script>
+						$(function () {
+							console.log('MN016 Script - jgpSlider exists:', $('.jgpSlider').length);
+							console.log('MN016 Script - jgpSlider initialized:', $('.jgpSlider').hasClass('slick-initialized'));
+							
+							// jgpSlider 요소가 있고 아직 초기화되지 않았을 때만 초기화
+							if($('.jgpSlider').length > 0 && !$('.jgpSlider').hasClass('slick-initialized')) {
+								$('.jgpSlider').slick({
+									swipe: false,
+									autoplay: true,
+									autoplaySpeed: 4000,
+									speed:600,
+									arrows: false,
+									dots: true,
+									pauseOnHover: false,
+									appendDots: $('.jpgDots'),
+									customPaging: function(slider, i) {
+										var total = slider.slideCount;
+										var current = i + 1;
+										return '<button type="button" aria-label="총 ' + total + '페이지 중 ' + current + '페이지">' + current + '</button>';
+									},
+									responsive: [{
+										breakpoint: 1300,
+										settings: {
+											swipe: true
+										}
+									}]
+							    });
+							}
+							    
+							    // jpgPusd 버튼이 있고 jgpSlider가 초기화되었을 때만 이벤트 바인딩
+							    if($('.jpgPusd').length > 0 && $('.jgpSlider').hasClass('slick-initialized')) {
+									$('.jpgPusd').on('click', function(){
+										if ($(this).hasClass('paused')){
+											$('.jgpSlider').slick('slickPlay');
+											$(this).removeClass('paused');
+											$(this).text('일시정지');
+										} else {
+											$('.jgpSlider').slick('slickPause');
+											$(this).addClass('paused');
+											$(this).text('재생');
+										}
+									});
+								}	
+							
+							var $frame  = $('.jiguTab');
+							var $slidee = $frame.children('ul').eq(0);
+							var $wrap   = $frame.parent();
+							$('.jiguTab > ul > li').each(function(){
+								var width= $(this).outerWidth();
+								$(this).css({'width':(width+1)});
+							});
+
+							$frame.sly({
+								horizontal: 1,
+								itemNav: 'basic',
+								smart: 1,
+								activateOn: 'click',
+								mouseDragging: 1,
+								touchDragging: 1,
+								releaseSwing: 1,
+							startAt: 3,
+								speed: 300,
+								elasticBounds: 1,
+								easing: 'easeOutExpo', 
+								clickBar: 1
+							});
+
+							$(window).resize(function() {
+								$frame.sly('reload');
+							 });
+
+						});
+
+					</script>
+							<!-- 3차메뉴 미리보는 3기신도시 -->
+							<!-- 그외 -->
+							<!-- 3차메뉴 미리보는 3기신도시 -->
+							<!-- 그외 -->
+							<!-- 3차메뉴 미리보는 3기신도시 -->
+							<!-- 그외 -->
+							<!-- 3차메뉴 미리보는 3기신도시 -->
+							<!-- 그외 -->
+							<!-- 3차메뉴 미리보는 3기신도시 -->
+							<!-- 그외 -->
+							<!-- 3차메뉴 미리보는 3기신도시 -->
+							<!-- 그외 -->
+			<!-- E : TABMENU 주요지구현황만 사용//-->
+			
+		<!-- nowMenuInfo// -->
+	
+
+	</div>
+	<!-- wrap// -->
+	<script src="/resources/_Js/common.base.js"></script>
+	<script src="/resources/_Templet/Header/header_kor/Js/topmenu.js"></script>
+	<script type="text/javascript" src="https://openapi.map.naver.com/openapi/v3/maps.js?govClientId=q7yx72110p&submodules=geocoder"></script>
+	<script type="text/javascript" src="/resources/_Js/main/lh/slick.min.js"></script>
+		<script src="/resources/_Js/jquery/jquery.cs_wauto.js"></script>
+		<script src="/resources/_Js/common.pageShare.js"></script>
+		<script charset="UTF-8" class="daum_roughmap_loader_script" src="https://ssl.daumcdn.net/dmaps/map_js_init/roughmapLoader.js"></script>
+		<script type="text/javascript" src="/resources/_Js/main/lh/responsive_waterfall.js"></script>
+	
+		</body>
+</html>
