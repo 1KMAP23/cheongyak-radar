@@ -7,6 +7,7 @@ on:
       areas: { description: '전용면적 목록 예: 59,79,84', required: false }
       since: { description: '이 날짜 이후 공고 (원본 검색)', required: false }
       brief: { description: '원본 검색 결과를 한 줄로', required: false }
+      queries: { description: '장소 키워드 검색 (;로 구분) — 있으면 이것만 실행', required: false }
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -15,5 +16,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm install --no-audit --no-fund
-      - run: node scripts/probe-raw.mjs && ([ -n "$PROBE_BRIEF" ] || node scripts/probe-item.mjs)
+      - if: inputs.queries != ''
+        run: node scripts/probe-places.mjs
+        env: { KAKAO_REST_KEY: "${{ secrets.KAKAO_REST_KEY }}", PROBE_QUERIES: "${{ inputs.queries }}" }
+      - if: inputs.queries == ''
+        run: node scripts/probe-raw.mjs && ([ -n "$PROBE_BRIEF" ] || node scripts/probe-item.mjs)
         env: { DATA_GO_KR_KEY: "${{ secrets.DATA_GO_KR_KEY }}", KAKAO_REST_KEY: "${{ secrets.KAKAO_REST_KEY }}", PROBE_NAME: "${{ inputs.name }}", PROBE_ADDR: "${{ inputs.addr }}", PROBE_AREAS: "${{ inputs.areas }}", PROBE_SINCE: "${{ inputs.since }}", PROBE_BRIEF: "${{ inputs.brief }}" }
