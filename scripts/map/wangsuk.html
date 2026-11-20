@@ -16,19 +16,22 @@ html,body{margin:0;font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif}
 .legend p{margin:6px 0 0;font-size:12px;color:#555;max-width:330px}
 </style></head><body>
 <div id="map"></div>
-<div class="legend"><h1>남양주 왕숙 신도시 청약 현황</h1>
+<div class="legend"><h1 id="t">남양주 왕숙 신도시 청약 현황</h1>
 <div><i style="background:#1d5fd1"></i>분양 끝난 공공분양 (단지명)</div>
 <div><i style="background:#1e9c5a"></i>분양 끝난 신혼희망타운</div>
 <div><i style="background:#e0362c"></i>지금 청약 중 (11/30~12/2)</div>
 <div><i style="background:#8a8f98"></i>사전청약만 끝난 블록 (본청약 예정)</div>
+<div><i style="background:#8a5cf6"></i>아직 공고 없는 블록</div>
+<div><i style="background:#ff9f1c;border-radius:3px"></i>왕숙역 (GTX-B·9호선 연장·경춘선, 예정)</div>
 <div><i style="background:#222;border-radius:3px"></i>지하철·전철역</div>
-<p>청약홈 공고 기준 2026-11-20. 괄호는 블록 · 세대수 · 입주 예정. 그 밖의 블록은 아직 공고가 없어 위치 미표시(토지이용계획도 참고). 왕숙역(GTX-B·9호선 연장)은 위치 미확정이라 표시하지 않음.</p></div>
+<p>청약홈 공고 기준 2026-11-20. 괄호는 블록 · 세대수 · 입주 예정. 그 밖의 블록은 아직 공고가 없어 위치 미표시(토지이용계획도 참고). 왕숙역은 LH 3기신도시 광역교통계획도의 역 위치를 실제 경춘선 선로에 맞춘 추정 위치(±200m). 점선 원은 왕숙역 반경 500m·1km.</p></div>
 <script>
 const m = L.map('map', { zoomControl: false, attributionControl: true }).setView([37.652, 127.172], 14);
 let errs = 0;
 const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(m);
 osm.on('tileerror', () => { if (++errs === 3) { m.removeLayer(osm); L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' }).addTo(m); } });
-const C = { pub: '#1d5fd1', hope: '#1e9c5a', now: '#e0362c', pre: '#8a8f98' };
+const C = { pub: '#1d5fd1', hope: '#1e9c5a', now: '#e0362c', pre: '#8a8f98', blk: '#8a5cf6' };
+const ZOOM = location.search.includes('zoom');
 const P = [
   ['pub', '남양주왕숙 A-1 공공분양', 'A-1 · 629세대 · 2028.08 입주', 37.69127, 127.17033, 'left', [-14, -26]],
   ['hope', '남양주왕숙 A-2 신혼희망타운', 'A-2 · 401세대 · 2028.08 입주', 37.68879, 127.16902, 'left', [-14, 22]],
@@ -41,7 +44,10 @@ const P = [
   ['pub', '남양주왕숙2 A-3 공공분양', '왕숙2 A-3 · 686세대 · 2030.05 입주', 37.61890, 127.17783, 'bottom', [0, 26]],
   ['pre', '왕숙2 A-4 블록', '사전청약 완료 · 본청약 예정', 37.62040, 127.17865, 'top', [0, -14]],
   ['pre', '왕숙2 A-6 블록', '사전청약 완료 · 본청약 예정', 37.61793, 127.18570, 'right', [14, 0]],
+  ['blk', 'A-25 블록', '아직 공고 없음 · 경춘선 남쪽', 37.65264, 127.17062, 'bottom', [0, 16]],
+  ['blk', 'S-9 블록', '아직 공고 없음', 37.66381, 127.16563, 'left', [-14, 0]],
 ];
+if (ZOOM) { const fix = { 'A-25 블록': ['right', [14, 6]], '남양주왕숙 A-24 신혼희망타운': ['bottom', [0, 14]], '남양주왕숙 B-17 공공분양': ['right', [14, -10]], '왕숙 한신더휴 센텀 ← 지금 청약': ['top', [0, -14]], 'S-9 블록': ['top', [0, -14]] }; for (const r of P) if (fix[r[1]]) { r[5] = fix[r[1]][0]; r[6] = fix[r[1]][1]; } }
 for (const [k, n, sub, y, x, dir, off] of P) {
   L.circleMarker([y, x], { radius: 10, color: '#fff', weight: 3, fillColor: C[k], fillOpacity: 1 }).addTo(m)
    .bindTooltip(`${n}<small>${sub}</small>`, { permanent: true, direction: dir, offset: off, className: 'lb' }).openTooltip();
@@ -49,7 +55,14 @@ for (const [k, n, sub, y, x, dir, off] of P) {
 document.querySelectorAll('.lb').forEach((el, i) => el.style.setProperty('--c', C[P[i][0]]));
 const S = [['사릉역 (경춘선)', 37.65112, 127.17693, 'right'], ['퇴계원역 (경춘선)', 37.64827, 127.14354, 'bottom'], ['별내역 (8호선·경춘선)', 37.64207, 127.12697, 'bottom'], ['다산역 (8호선)', 37.62428, 127.14980, 'top'], ['도농역 (경의중앙선)', 37.60877, 127.16118, 'bottom'], ['양정역 (경의중앙선)', 37.60403, 127.19467, 'bottom'], ['금곡역 (경춘선)', 37.63736, 127.20753, 'bottom'], ['오남역 (4호선)', 37.70516, 127.19110, 'bottom']];
 for (const [n, y, x, d] of S) L.marker([y, x], { icon: L.divIcon({ className: '', html: '<div style="width:12px;height:12px;background:#222;border:2px solid #fff;border-radius:3px"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }) }).addTo(m).bindTooltip(n, { permanent: true, direction: d, offset: d === 'right' ? [8, 0] : d === 'left' ? [-8, 0] : d === 'top' ? [0, -8] : [0, 6], className: 'st' });
-for (const [n, y, x] of [['왕숙1 (남양주왕숙)', 37.672, 127.125], ['왕숙2', 37.614, 127.198]]) L.marker([y, x], { icon: L.divIcon({ className: '', html: `<div class="zone">${n}</div>`, iconSize: [0, 0] }) }).addTo(m);
-m.fitBounds([[37.598, 127.125], [37.708, 127.21]], { padding: [10, 10] });
+const WS = [37.6541, 127.1610];
+L.circle(WS, { radius: 500, color: '#ff9f1c', weight: 2, dashArray: '6 6', fill: false }).addTo(m);
+L.circle(WS, { radius: 1000, color: '#ff9f1c', weight: 2, dashArray: '2 8', fill: false }).addTo(m);
+L.marker(WS, { icon: L.divIcon({ className: '', html: '<div style="width:20px;height:20px;background:#ff9f1c;border:3px solid #fff;border-radius:5px;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>', iconSize: [26, 26], iconAnchor: [13, 13] }) }).addTo(m)
+  .bindTooltip('왕숙역 (예정)<small>GTX-B · 9호선 연장 · 경춘선</small>', { permanent: true, direction: 'left', offset: [-14, 0], className: 'lb' }).getTooltip().getElement?.();
+for (const [n, y, x] of (ZOOM ? [] : [['왕숙1 (남양주왕숙)', 37.672, 127.125], ['왕숙2', 37.614, 127.198]])) L.marker([y, x], { icon: L.divIcon({ className: '', html: `<div class="zone">${n}</div>`, iconSize: [0, 0] }) }).addTo(m);
+if (ZOOM) m.fitBounds([[37.644, 127.150], [37.668, 127.182]], { padding: [10, 10] }); else m.fitBounds([[37.598, 127.125], [37.708, 127.21]], { padding: [10, 10] });
+setTimeout(() => document.querySelectorAll('.lb').forEach(el => { if (!el.style.getPropertyValue('--c')) el.style.setProperty('--c', '#ff9f1c'); }), 100);
+if (ZOOM) document.getElementById('t').textContent = '왕숙역 주변 확대 (왕숙1 남쪽)';
 window.READY = new Promise(r => setTimeout(r, 4000));
 </script></body></html>

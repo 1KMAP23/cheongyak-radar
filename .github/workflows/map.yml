@@ -10,7 +10,7 @@ jobs:
       - run: cd scripts/map && npm init -y >/dev/null && npm i playwright@1.47.2 >/dev/null && npx playwright install --with-deps chromium >/dev/null
       - run: cd scripts/map && (python3 -m http.server 8080 &) && sleep 2 && node render.mjs
       - run: |
-          cp scripts/map/wangsuk-map.png /tmp/m.png
+          cp scripts/map/wangsuk-*.png /tmp/
           git config user.name map-bot && git config user.email map-bot@users.noreply.github.com
-          git checkout --orphan map-out && git rm -rfq . && cp /tmp/m.png wangsuk-map.png
-          git add wangsuk-map.png && git commit -qm map && git push -f origin map-out
+          git checkout --orphan map-out && git rm -rfq . && cp /tmp/wangsuk-*.png .
+          git add wangsuk-*.png && git commit -qm map && git push -f origin map-out
