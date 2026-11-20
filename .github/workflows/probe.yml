@@ -18,7 +18,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - if: inputs.queries != ''
         run: node scripts/probe-places.mjs
-        env: { KAKAO_REST_KEY: "${{ secrets.KAKAO_REST_KEY }}", PROBE_QUERIES: "${{ inputs.queries }}" }
+        env: { KAKAO_REST_KEY: "${{ secrets.KAKAO_REST_KEY }}", PROBE_QUERIES: "${{ inputs.queries }}", PROBE_OSM: "1" }
       - if: inputs.queries == ''
         run: node scripts/probe-raw.mjs && ([ -n "$PROBE_BRIEF" ] || node scripts/probe-item.mjs)
         env: { DATA_GO_KR_KEY: "${{ secrets.DATA_GO_KR_KEY }}", KAKAO_REST_KEY: "${{ secrets.KAKAO_REST_KEY }}", PROBE_NAME: "${{ inputs.name }}", PROBE_ADDR: "${{ inputs.addr }}", PROBE_AREAS: "${{ inputs.areas }}", PROBE_SINCE: "${{ inputs.since }}", PROBE_BRIEF: "${{ inputs.brief }}" }
