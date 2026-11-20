@@ -8,9 +8,10 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      - env: { URLS: "${{ inputs.urls }}" }
+        run: |
           mkdir out && cd out; i=0
-          for u in ${{ inputs.urls }}; do
+          for u in $URLS; do
             i=$((i+1)); curl -sSL -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124' --max-time 40 "$u" -o "p$i.bin" || true
             echo "$i $u $(file -b --mime-type p$i.bin) $(stat -c%s p$i.bin)" >> index.txt
             if file -b --mime-type p$i.bin | grep -q html; then
