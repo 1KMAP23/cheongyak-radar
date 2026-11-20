@@ -1,0 +1,29 @@
+name: fetch
+on:
+  workflow_dispatch:
+    inputs:
+      urls: { description: '공백으로 구분한 URL (페이지는 그 안의 이미지도 받음)', required: true }
+permissions: { contents: write }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          mkdir out && cd out; i=0
+          for u in ${{ inputs.urls }}; do
+            i=$((i+1)); curl -sSL -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124' --max-time 40 "$u" -o "p$i.bin" || true
+            echo "$i $u $(file -b --mime-type p$i.bin) $(stat -c%s p$i.bin)" >> index.txt
+            if file -b --mime-type p$i.bin | grep -q html; then
+              base=$(echo "$u" | sed -E 's#(https?://[^/]+).*#\1#'); j=0
+              grep -oiE '<img[^>]+src="[^"]+"' p$i.bin | sed -E 's/.*src="([^"]+)"/\1/' | grep -iE 'png|jpe?g|gif|webp|image|file|down' | head -60 | while read s; do
+                j=$((j+1)); case "$s" in http*) f="$s";; //*) f="https:$s";; /*) f="$base$s";; *) f="$base/$s";; esac
+                curl -sSL -A 'Mozilla/5.0' --max-time 30 "$f" -o "p$i-img$j" || true
+                echo "$i-$j $f $(file -b --mime-type p$i-img$j) $(stat -c%s p$i-img$j 2>/dev/null)" >> index.txt
+              done
+            fi
+          done
+          cat index.txt
+      - run: |
+          cd out && git init -q && git config user.name fetch-bot && git config user.email fetch-bot@users.noreply.github.com
+          git checkout -q -b fetch-out && git add . && git commit -qm fetch
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" fetch-out
