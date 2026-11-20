@@ -37,7 +37,7 @@ const P = [
   ['now', '왕숙 한신더휴 센텀 ← 지금 청약', 'A-17 · 379세대 · 2029.07 입주', 37.65841, 127.16629, 'left', [-14, -24]],
   ['pub', '남양주왕숙 B-17 공공분양', 'B-17 · 491세대 · 2028.12 입주', 37.65654, 127.17104, 'right', [14, -22]],
   ['hope', '남양주왕숙 A-24 신혼희망타운', 'A-24 · 390세대 · 2028.12 입주', 37.65630, 127.16924, 'left', [-14, 30]],
-  ['pub', '왕숙 아테라', '왕숙2 A-1 · 812세대 · 2029.02 입주', 37.61954, 127.17181, 'left', [-14, -20]],
+  ['pub', '왕숙 아테라', '왕숙2 A-1 · 812세대 · 2029.02 입주', 37.61954, 127.17181, 'left', [-14, 34]],
   ['pub', '남양주왕숙2 A-3 공공분양', '왕숙2 A-3 · 686세대 · 2030.05 입주', 37.61890, 127.17783, 'bottom', [0, 26]],
   ['pre', '왕숙2 A-4 블록', '사전청약 완료 · 본청약 예정', 37.62040, 127.17865, 'top', [0, -14]],
   ['pre', '왕숙2 A-6 블록', '사전청약 완료 · 본청약 예정', 37.61793, 127.18570, 'right', [14, 0]],
@@ -47,9 +47,9 @@ for (const [k, n, sub, y, x, dir, off] of P) {
    .bindTooltip(`${n}<small>${sub}</small>`, { permanent: true, direction: dir, offset: off, className: 'lb' }).openTooltip();
 }
 document.querySelectorAll('.lb').forEach((el, i) => el.style.setProperty('--c', C[P[i][0]]));
-const S = [['사릉역 (경춘선)', 37.65112, 127.17693, 'right'], ['퇴계원역 (경춘선)', 37.64827, 127.14354, 'bottom'], ['별내역 (8호선·경춘선)', 37.64207, 127.12697, 'bottom'], ['다산역 (8호선)', 37.62428, 127.14980, 'left'], ['도농역 (경의중앙선)', 37.60877, 127.16118, 'bottom'], ['양정역 (경의중앙선)', 37.60403, 127.19467, 'bottom'], ['금곡역 (경춘선)', 37.63736, 127.20753, 'bottom'], ['오남역 (4호선)', 37.70516, 127.19110, 'bottom']];
-for (const [n, y, x, d] of S) L.marker([y, x], { icon: L.divIcon({ className: '', html: '<div style="width:12px;height:12px;background:#222;border:2px solid #fff;border-radius:3px"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }) }).addTo(m).bindTooltip(n, { permanent: true, direction: d, offset: d === 'right' ? [8, 0] : d === 'left' ? [-8, 0] : [0, 6], className: 'st' });
-for (const [n, y, x] of [['왕숙1 (남양주왕숙)', 37.672, 127.125], ['왕숙2', 37.632, 127.178]]) L.marker([y, x], { icon: L.divIcon({ className: '', html: `<div class="zone">${n}</div>`, iconSize: [0, 0] }) }).addTo(m);
+const S = [['사릉역 (경춘선)', 37.65112, 127.17693, 'right'], ['퇴계원역 (경춘선)', 37.64827, 127.14354, 'bottom'], ['별내역 (8호선·경춘선)', 37.64207, 127.12697, 'bottom'], ['다산역 (8호선)', 37.62428, 127.14980, 'top'], ['도농역 (경의중앙선)', 37.60877, 127.16118, 'bottom'], ['양정역 (경의중앙선)', 37.60403, 127.19467, 'bottom'], ['금곡역 (경춘선)', 37.63736, 127.20753, 'bottom'], ['오남역 (4호선)', 37.70516, 127.19110, 'bottom']];
+for (const [n, y, x, d] of S) L.marker([y, x], { icon: L.divIcon({ className: '', html: '<div style="width:12px;height:12px;background:#222;border:2px solid #fff;border-radius:3px"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }) }).addTo(m).bindTooltip(n, { permanent: true, direction: d, offset: d === 'right' ? [8, 0] : d === 'left' ? [-8, 0] : d === 'top' ? [0, -8] : [0, 6], className: 'st' });
+for (const [n, y, x] of [['왕숙1 (남양주왕숙)', 37.672, 127.125], ['왕숙2', 37.614, 127.198]]) L.marker([y, x], { icon: L.divIcon({ className: '', html: `<div class="zone">${n}</div>`, iconSize: [0, 0] }) }).addTo(m);
 m.fitBounds([[37.598, 127.125], [37.708, 127.21]], { padding: [10, 10] });
 window.READY = new Promise(r => setTimeout(r, 4000));
 </script></body></html>
